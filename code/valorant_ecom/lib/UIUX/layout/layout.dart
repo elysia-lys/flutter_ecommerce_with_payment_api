@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/mainpage.dart'; 
+import 'package:valo/UIUX/pages/mainpage.dart';
 import 'package:valo/UIUX/pages/product.dart';
 import '../../main.dart';
 import '../pages/favorite.dart';
@@ -14,10 +14,7 @@ import '../category_pages/toys_figurines.dart';
 import '../pages/transaction_history/history.dart';
 import '../login_credential/login.dart';
 
-/// Represents a single product entry retrieved from Firestore.
-/// Each product contains descriptive and classification attributes
-/// such as name, description, category, and image. Used across
-/// pages including search results, product details, and categories.
+/// Product model for Firestore product entries
 class Product {
   final String name;
   final String desc;
@@ -29,7 +26,6 @@ class Product {
   final String measurement;
   final String image;
 
-  /// Creates a [Product] with all required properties.
   const Product({
     required this.name,
     required this.desc,
@@ -42,7 +38,6 @@ class Product {
     required this.image,
   });
 
-  /// Factory constructor for building a [Product] object from a Firestore document.
   factory Product.fromFirestore(Map<String, dynamic> data) {
     return Product(
       name: data['name'] ?? '',
@@ -58,18 +53,17 @@ class Product {
   }
 }
 
-/// Provides a consistent layout wrapper for app pages.
-///
-/// Includes a top navigation bar ([TopBar]) and dynamic [body] content.
-/// Used to maintain consistent visual structure across the app.
+/// Layout wrapper with TopBar
 class AppLayout extends StatelessWidget {
   final Widget body;
+  final String title;
+  final List<IconButton> appBarActions;
 
   const AppLayout({
     super.key,
     required this.body,
-    required List<IconButton> appBarActions,
-    required String title,
+    required this.title,
+    required this.appBarActions,
   });
 
   @override
@@ -86,10 +80,7 @@ class AppLayout extends StatelessWidget {
   }
 }
 
-/// Displays the top navigation bar with a logo, search bar, cart, and menu.
-///
-/// The [TopBar] also implements Firestore search functionality with
-/// a debounced filter for products by name or description.
+/// TopBar with search, cart, and menu
 class TopBar extends StatefulWidget {
   const TopBar({super.key});
 
@@ -99,60 +90,53 @@ class TopBar extends StatefulWidget {
 
 class _TopBarState extends State<TopBar> {
   final TextEditingController _controller = TextEditingController();
-
-  /// List of all products fetched from Firestore.
   List<Product> allProducts = [];
-
-  /// Filtered list of products based on search input.
   List<Product> filteredProducts = [];
-
-  /// Indicates if product data is currently being loaded.
   bool isLoading = true;
-
-  /// Indicates if the system is actively filtering products.
   bool isSearching = false;
-
-  /// Tracks the most recent search input timestamp for debouncing.
   DateTime? _lastSearch;
 
   @override
   void initState() {
     super.initState();
     _loadProductsFromFirestore();
+
+    // Listen to global cart notifier
+    cartCountNotifier.addListener(_onCartCountChanged);
   }
 
-  /// Loads all product data from Firestore's `products` collection.
-  ///
-  /// The products are cached locally in [allProducts] to avoid repeated
-  /// Firestore reads during search filtering.
+  @override
+  void dispose() {
+    cartCountNotifier.removeListener(_onCartCountChanged);
+    super.dispose();
+  }
+
+  void _onCartCountChanged() {
+    setState(() {}); // Update badge when cart changes
+  }
+
+  /// Load all products from Firestore
   Future<void> _loadProductsFromFirestore() async {
     try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('products').get();
-
-      final products =
-          snapshot.docs.map((doc) => Product.fromFirestore(doc.data())).toList();
-
+      final snapshot = await FirebaseFirestore.instance.collection('products').get();
+      final products = snapshot.docs.map((doc) => Product.fromFirestore(doc.data())).toList();
       setState(() {
         allProducts = products;
         filteredProducts = products;
         isLoading = false;
       });
     } catch (e) {
-      debugPrint('❌ Firestore load error: $e');
+      debugPrint('Firestore load error: $e');
       setState(() => isLoading = false);
     }
   }
 
-  /// Applies a 300 ms debounce before filtering products by query text.
-  ///
-  /// This improves performance and avoids over-triggering on every keystroke.
+  /// Filter products based on search text (300ms debounce)
   void _filterProducts(String query) {
     final now = DateTime.now();
     _lastSearch = now;
 
     Future.delayed(const Duration(milliseconds: 300), () {
-      // Only execute the latest queued search
       if (_lastSearch == now) {
         final search = query.toLowerCase();
         setState(() => isSearching = true);
@@ -170,17 +154,53 @@ class _TopBarState extends State<TopBar> {
     });
   }
 
+  /// Cart icon with reactive badge
+  Widget _buildCartIcon() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CartPage()),
+            );
+          },
+          icon: const Icon(Icons.shopping_cart, color: Colors.red, size: 28),
+        ),
+        if (cartCountNotifier.value > 0)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.redAccent,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '${cartCountNotifier.value}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        /// Top navigation row: logo, search bar, and action icons.
         Container(
           padding: const EdgeInsets.fromLTRB(12, 25, 12, 10),
           color: Colors.black,
           child: Row(
             children: [
-              /// App logo that navigates to [MainPage] on tap.
               GestureDetector(
                 onTap: () {
                   Navigator.pushAndRemoveUntil(
@@ -195,13 +215,10 @@ class _TopBarState extends State<TopBar> {
                   height: 55,
                 ),
               ),
-
-              /// Search input bar for quick product lookup.
               Expanded(
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 14),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                   decoration: BoxDecoration(
                     color: Colors.redAccent,
                     borderRadius: BorderRadius.circular(10),
@@ -213,15 +230,12 @@ class _TopBarState extends State<TopBar> {
                       Expanded(
                         child: TextField(
                           controller: _controller,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
                           decoration: const InputDecoration(
                             isDense: true,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
                             hintText: "Search...",
-                            hintStyle:
-                                TextStyle(color: Colors.white70, fontSize: 14),
+                            hintStyle: TextStyle(color: Colors.white70, fontSize: 14),
                             border: InputBorder.none,
                           ),
                           onChanged: _filterProducts,
@@ -232,27 +246,13 @@ class _TopBarState extends State<TopBar> {
                 ),
               ),
 
-              /// Cart and menu buttons.
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CartPage()),
-                      );
-                    },
-                    icon: const Icon(Icons.shopping_cart,
-                        color: Colors.red, size: 28),
-                  ),
-                  const MenuButton(),
-                ],
-              ),
+              _buildCartIcon(),
+              const MenuButton(),
             ],
           ),
         ),
 
-        /// Displays search results below the top bar when query is active.
+        // Search results dropdown
         if (_controller.text.isNotEmpty)
           Container(
             color: Colors.black,
@@ -260,13 +260,9 @@ class _TopBarState extends State<TopBar> {
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : isSearching
-                    ? const Center(
-                        child: Text("Searching...",
-                            style: TextStyle(color: Colors.white70)))
+                    ? const Center(child: Text("Searching...", style: TextStyle(color: Colors.white70)))
                     : filteredProducts.isEmpty
-                        ? const Center(
-                            child: Text('No products found',
-                                style: TextStyle(color: Colors.white70)))
+                        ? const Center(child: Text('No products found', style: TextStyle(color: Colors.white70)))
                         : ListView.builder(
                             itemCount: filteredProducts.length,
                             itemBuilder: (context, index) {
@@ -281,12 +277,8 @@ class _TopBarState extends State<TopBar> {
                                   width: 40,
                                   height: 40,
                                 ),
-                                title: Text(product.name,
-                                    style:
-                                        const TextStyle(color: Colors.white)),
-                                subtitle: Text(product.desc,
-                                    style: const TextStyle(
-                                        color: Colors.white70)),
+                                title: Text(product.name, style: const TextStyle(color: Colors.white)),
+                                subtitle: Text(product.desc, style: const TextStyle(color: Colors.white70)),
                                 onTap: () {
                                   Navigator.push(
                                     context,
@@ -314,14 +306,10 @@ class _TopBarState extends State<TopBar> {
   }
 }
 
-/// Displays the app’s main side menu with navigation and logout options.
-///
-/// The [MenuButton] opens a sliding drawer containing navigation links
-/// to home, favorites, purchase history, and product categories.
+/// Menu button with navigation
 class MenuButton extends StatelessWidget {
   const MenuButton({super.key});
 
-  /// Opens the left slide-in menu panel.
   void _openMenu(BuildContext context) {
     showGeneralDialog(
       context: context,
@@ -341,9 +329,7 @@ class MenuButton extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      // ignore: deprecated_member_use
                       const Color.fromARGB(255, 62, 1, 1).withOpacity(0.9),
-                      // ignore: deprecated_member_use
                       const Color.fromARGB(255, 2, 2, 41).withOpacity(0.9),
                     ],
                     begin: Alignment.topLeft,
@@ -354,73 +340,40 @@ class MenuButton extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   children: [
                     const DrawerHeader(
-                      child: Text(
-                        "Menu",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: Text("Menu", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                     ),
-
-                    /// Home and categories
                     _menuItem(context, Icons.home, "Home", const MainPage()),
                     ListTile(
-                      leading:
-                          const Icon(Icons.category, color: Colors.white),
-                      title: const Text("Categories",
-                          style: TextStyle(color: Colors.white)),
+                      leading: const Icon(Icons.category, color: Colors.white),
+                      title: const Text("Categories", style: TextStyle(color: Colors.white)),
                       onTap: () {
                         Navigator.pop(context);
                         _openCategoriesMenu(context);
                       },
                     ),
-
                     const Divider(color: Colors.white54),
-
-                    /// Favorites and purchase history
-                    _menuItem(context, Icons.favorite, "My Favourite",
-                        const FavoritePage()),
-                    _menuItem(context, Icons.history, "Purchase History",
-                        const HistoryPage()),
-
+                    _menuItem(context, Icons.favorite, "My Favourite", const FavoritePage()),
+                    _menuItem(context, Icons.history, "Purchase History", const HistoryPage()),
                     const Divider(color: Colors.white54),
-
-                    /// Logout button with immediate navigation
                     ListTile(
-                      leading: const Icon(Icons.logout,
-                          color: Colors.redAccent),
-                      title: const Text("Logout",
-                          style: TextStyle(color: Colors.white)),
-                      onTap: () {
+                      leading: const Icon(Icons.logout, color: Colors.redAccent),
+                      title: const Text("Logout", style: TextStyle(color: Colors.white)),
+                      onTap: () async {
                         Navigator.pop(context);
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(
-                              builder: (_) => const LoginPage()),
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
                           (route) => false,
                         );
-
-                        // Background Firestore update for logout status
-                        Future(() async {
-                          try {
-                            final userRef = FirebaseFirestore.instance
-                                .collection('users');
-                            final loggedInUser = await userRef
-                                .where('loggedIn', isEqualTo: true)
-                                .get();
-
-                            if (loggedInUser.docs.isNotEmpty) {
-                              await userRef
-                                  .doc(loggedInUser.docs.first.id)
-                                  .update({'loggedIn': false});
-                            }
-                          } catch (e) {
-                            debugPrint(
-                                "⚠️ Firestore logout update failed: $e");
+                        try {
+                          final userRef = FirebaseFirestore.instance.collection('users');
+                          final loggedInUser = await userRef.where('loggedIn', isEqualTo: true).get();
+                          if (loggedInUser.docs.isNotEmpty) {
+                            await userRef.doc(loggedInUser.docs.first.id).update({'loggedIn': false});
                           }
-                        });
+                        } catch (e) {
+                          debugPrint("Firestore logout update failed: $e");
+                        }
                       },
                     ),
                   ],
@@ -431,90 +384,71 @@ class MenuButton extends StatelessWidget {
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final offsetAnimation = Tween<Offset>(
-                begin: const Offset(-1, 0), end: Offset.zero)
-            .animate(animation);
+        final offsetAnimation = Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero).animate(animation);
         return SlideTransition(position: offsetAnimation, child: child);
       },
     );
   }
 
-  /// Creates a reusable list tile for menu navigation.
-  static ListTile _menuItem(
-      BuildContext context, IconData icon, String title, Widget page) {
+  static ListTile _menuItem(BuildContext context, IconData icon, String title, Widget page) {
     return ListTile(
       leading: Icon(icon, color: Colors.white),
       title: Text(title, style: const TextStyle(color: Colors.white)),
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-      },
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
     );
   }
 
-  /// Opens the left-side category drawer listing all product categories.
-void _openCategoriesMenu(BuildContext context) {
-  showGeneralDialog(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: "Categories",
-    barrierColor: Colors.black54,
-    transitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (context, animation, secondaryAnimation) {
-      return Align(
-        alignment: Alignment.centerLeft, // changed from right to left
-        child: FractionallySizedBox(
-          widthFactor: 0.6,
-          heightFactor: 1.0,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    // ignore: deprecated_member_use
-                    const Color.fromARGB(255, 2, 2, 41).withOpacity(0.95),
-                    // ignore: deprecated_member_use
-                    const Color.fromARGB(255, 62, 1, 1).withOpacity(0.95),
-                  ],
-                  begin: Alignment.topLeft, // updated for left alignment
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: const [
-                  DrawerHeader(
-                    child: Text(
-                      "Categories",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+  void _openCategoriesMenu(BuildContext context) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Categories",
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: 0.6,
+            heightFactor: 1.0,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color.fromARGB(255, 2, 2, 41).withOpacity(0.95),
+                      const Color.fromARGB(255, 62, 1, 1).withOpacity(0.95),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  _CategoryItem(Icons.checkroom, "Clothing", ClothingPage()),
-                  _CategoryItem(Icons.watch, "Fashion Accessories", FashionAccessoryPage()),
-                  _CategoryItem(Icons.computer, "Computer & Accessories", ComputerAccessoryPage()),
-                  _CategoryItem(Icons.shopping_bag, "Bags", BagsPage()),
-                  _CategoryItem(Icons.edit, "Stationeries", StationeryPage()),
-                  _CategoryItem(Icons.toys, "Toys & Figurines", ToyFigurinesPage()),
-                ],
+                ),
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: const [
+                    DrawerHeader(
+                      child: Text("Categories", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                    ),
+                    _CategoryItem(Icons.checkroom, "Clothing", ClothingPage()),
+                    _CategoryItem(Icons.watch, "Fashion Accessories", FashionAccessoryPage()),
+                    _CategoryItem(Icons.computer, "Computer & Accessories", ComputerAccessoryPage()),
+                    _CategoryItem(Icons.shopping_bag, "Bags", BagsPage()),
+                    _CategoryItem(Icons.edit, "Stationeries", StationeryPage()),
+                    _CategoryItem(Icons.toys, "Toys & Figurines", ToyFigurinesPage()),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-    },
-    transitionBuilder: (context, animation, secondaryAnimation, child) {
-      final offsetAnimation = Tween<Offset>(
-        begin: const Offset(-1, 0), // start from left instead of right
-        end: Offset.zero,
-      ).animate(animation);
-      return SlideTransition(position: offsetAnimation, child: child);
-    },
-  );
-}
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final offsetAnimation = Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero).animate(animation);
+        return SlideTransition(position: offsetAnimation, child: child);
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -525,9 +459,7 @@ void _openCategoriesMenu(BuildContext context) {
   }
 }
 
-/// Reusable list tile for category navigation within the category menu.
-///
-/// Each [_CategoryItem] links to a specific product category page.
+/// Category list item
 class _CategoryItem extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -540,8 +472,7 @@ class _CategoryItem extends StatelessWidget {
     return ListTile(
       leading: Icon(icon, color: Colors.white),
       title: Text(title, style: const TextStyle(color: Colors.white)),
-      onTap: () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
     );
   }
 }
