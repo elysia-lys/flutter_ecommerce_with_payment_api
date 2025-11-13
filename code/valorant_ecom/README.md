@@ -1,6 +1,8 @@
-# valo
+# Flutter E-commerce
 
-A new Flutter project.
+This flutter project is about how you can link AmpersandPay online payment gateway to your e-commerce platform.
+
+Take this as a template :>
 
 ## Getting Started
 
