@@ -58,9 +58,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
   /// Controller for the customer's phone number input field.
   final numberController = TextEditingController();
 
-  /// Whether the "Pay Now" button should be displayed.
-  bool showPayButton = false;
-
   /// Selected payment method from the dropdown.
   String? selectedPayment;
 
@@ -91,12 +88,8 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     }
   }
 
-  /// Handles form validation and saving order details to Firestore.
-  ///
-  /// - Validates all text fields and checks that a payment method is selected.
-  /// - Saves order data to the `orders` collection in Firestore.
-  /// - Updates [showPayButton] to true to enable proceeding to payment.
-  Future<void> _handleProceed() async {
+  /// Handles full checkout process: validate, save to Firestore, then initiate payment.
+  Future<void> _handlePay() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (selectedPayment == null) {
@@ -106,59 +99,49 @@ class _OrderCheckoutState extends State<OrderCheckout> {
       return;
     }
 
-    final txChannel = getChannelCode(selectedPayment!);
-
-    // Construct order document for Firestore
-    final orderData = {
-      "merchantId": "91012387",
-      "txType": "SALE",
-      "txChannel": txChannel,
-      "orderId": widget.orderId,
-      "orderRef": widget.orderId,
-      "userId": widget.userId, // Link order to Firestore user
-      "txCurrency": "MYR",
-      "txAmount": totalPay.toStringAsFixed(2),
-      "custName": nameController.text,
-      "custEmail": emailController.text,
-      "custContact": numberController.text,
-      "address": addressController.text,
-      "productList": widget.cartItems
-          .map((i) => {
-                "id": i["id"], // Optional product ID for tracking
-                "name": i["name"],
-                "qty": i["quantity"],
-                "amount": i["price"].toStringAsFixed(2),
-                "image": i["image"] ?? "assets/others/image_not_found.png",
-              })
-          .toList(),
-      "status": "pending_payment",
-      "deliveryStatus": "not_started",
-      "createdAt": DateTime.now(),
-    };
-
-    // Save order in Firestore
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .set(orderData);
-
-    setState(() => showPayButton = true);
-
-    // ignore: use_build_context_synchronously
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Order saved. Ready for payment via $selectedPayment")),
-    );
-  }
-
-  /// Initiates the payment process via the external API.
-  ///
-  /// - Calls [CallApi.processPayment] passing all relevant order and user information.
-  /// - Redirects to [PaymentWebView] with the checkout URL and transaction ID.
-  /// - Shows an error message if the payment initiation fails.
-  Future<void> _handlePay() async {
-    if (selectedPayment == null) return;
-
     try {
+      // Show loading message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Processing your order...")),
+      );
+
+      final txChannel = getChannelCode(selectedPayment!);
+
+      // Construct order document for Firestore
+      final orderData = {
+        "merchantId": "91012387",
+        "txType": "SALE",
+        "txChannel": txChannel,
+        "orderId": widget.orderId,
+        "orderRef": widget.orderId,
+        "userId": widget.userId,
+        "txCurrency": "MYR",
+        "txAmount": totalPay.toStringAsFixed(2),
+        "custName": nameController.text,
+        "custEmail": emailController.text,
+        "custContact": numberController.text,
+        "address": addressController.text,
+        "productList": widget.cartItems
+            .map((i) => {
+                  "id": i["id"],
+                  "name": i["name"],
+                  "qty": i["quantity"],
+                  "amount": i["price"].toStringAsFixed(2),
+                  "image": i["image"] ?? "assets/others/image_not_found.png",
+                })
+            .toList(),
+        "status": "pending_payment",
+        "deliveryStatus": "not_started",
+        "createdAt": DateTime.now(),
+      };
+
+      // Step 1: Save order to Firestore
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .set(orderData);
+
+      // Step 2: Call payment API
       final response = await CallApi.processPayment(
         totalAmount: totalPay,
         paymentMethod: selectedPayment!,
@@ -170,22 +153,23 @@ class _OrderCheckoutState extends State<OrderCheckout> {
           "address": addressController.text,
         },
         orderId: widget.orderId,
-        userId: widget.userId, // Pass Firestore user ID for tracking
+        userId: widget.userId,
       );
 
+      // Step 3: Redirect to payment page
       if (response != null && response.containsKey("checkoutUrl")) {
         final checkoutUrl = response["checkoutUrl"];
         final txId = response["txId"] ?? "TX_UNKNOWN";
 
+        // ignore: use_build_context_synchronously
         Navigator.pushReplacement(
-          // ignore: use_build_context_synchronously
           context,
           MaterialPageRoute(
             builder: (_) => PaymentWebView(
               checkoutUrl: checkoutUrl,
               orderId: widget.orderId,
               txId: txId,
-              userId: widget.userId, // Keep Firestore user ID
+              userId: widget.userId,
             ),
           ),
         );
@@ -193,8 +177,10 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  "Failed to initiate payment: ${response?["message"] ?? "Unknown error"}")),
+            content: Text(
+              "Failed to initiate payment: ${response?["message"] ?? "Unknown error"}",
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -207,11 +193,7 @@ class _OrderCheckoutState extends State<OrderCheckout> {
   }
 
   /// Builds a reusable text form field with validation.
-  ///
-  /// [label] is displayed above the input.
-  /// [controller] manages the field's value.
-  Widget _buildTextField(String label, TextEditingController controller) =>
-      Padding(
+  Widget _buildTextField(String label, TextEditingController controller) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: TextFormField(
           controller: controller,
@@ -250,7 +232,8 @@ class _OrderCheckoutState extends State<OrderCheckout> {
                 height: 50,
                 fit: BoxFit.cover,
               ),
-              title: Text(item["name"], style: const TextStyle(color: Colors.white)),
+              title:
+                  Text(item["name"], style: const TextStyle(color: Colors.white)),
               subtitle: Text(
                 "Qty: ${item["quantity"]} | RM ${item["price"].toStringAsFixed(2)}",
                 style: const TextStyle(color: Colors.white70),
@@ -273,8 +256,10 @@ class _OrderCheckoutState extends State<OrderCheckout> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar:
-          AppBar(title: const Text("Checkout"), backgroundColor: Colors.redAccent),
+      appBar: AppBar(
+        title: const Text("Checkout"),
+        backgroundColor: Colors.redAccent,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
         child: Form(
@@ -290,75 +275,62 @@ class _OrderCheckoutState extends State<OrderCheckout> {
               _buildTextField("Email", emailController),
               _buildTextField("Phone Number", numberController),
               const SizedBox(height: 16),
+
               // Dropdown for selecting payment method
               DropdownButtonFormField<String>(
-                initialValue: selectedPayment,
+                value: selectedPayment,
                 decoration: const InputDecoration(
-                    labelText: "Payment Method",
-                    labelStyle: TextStyle(color: Colors.white)),
+                  labelText: "Payment Method",
+                  labelStyle: TextStyle(color: Colors.white),
+                ),
                 dropdownColor: Colors.black,
                 items: paymentMethods
-                    .map((m) =>
-                        DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(color: Colors.white))))
+                    .map(
+                      (m) => DropdownMenuItem(
+                        value: m,
+                        child: Text(m, style: const TextStyle(color: Colors.white)),
+                      ),
+                    )
                     .toList(),
                 onChanged: (v) => setState(() => selectedPayment = v),
               ),
               const SizedBox(height: 20),
+
               _buildCartSummary(),
               const SizedBox(height: 30),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 30),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Cancel button
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade900,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
-                          ),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("Cancel", style: TextStyle(fontSize: 16)),
-                        ),
-                        // Proceed button (saves order)
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
-                          ),
-                          onPressed: _handleProceed,
-                          child: const Text("Proceed", style: TextStyle(fontSize: 16)),
-                        ),
-                      ],
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Cancel button
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade900,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
-                    // Pay Now button shown after order is saved
-                    if (showPayButton)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: Center(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.greenAccent,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 40, vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: _handlePay,
-                            child: const Text(
-                              "Pay Now",
-                              style: TextStyle(color: Colors.black, fontSize: 16),
-                            ),
-                          ),
-                        ),
+                    onPressed: () => Navigator.pop(context),
+                    child:
+                        const Text("Cancel", style: TextStyle(fontSize: 16)),
+                  ),
+
+                  // Single Pay Now button
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.greenAccent,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                  ],
-                ),
+                    ),
+                    onPressed: _handlePay,
+                    child: const Text(
+                      "Pay Now",
+                      style: TextStyle(color: Colors.black, fontSize: 16),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
