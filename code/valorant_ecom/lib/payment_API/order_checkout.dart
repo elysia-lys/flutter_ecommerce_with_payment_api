@@ -4,32 +4,12 @@ import 'call_api.dart';
 import 'payment_webview.dart';
 import '../main.dart'; // Import SafeImage for displaying product images
 
-/// Checkout page for placing and paying an order.
-///
-/// This page handles:
-/// - User input for delivery information
-/// - Selection of payment method
-/// - Saving order data to Firestore
-/// - Redirecting to the payment gateway
-///
-/// Requires the user's Firestore [userId], the order ID, a list of cart items,
-/// and the subtotal amount.
 class OrderCheckout extends StatefulWidget {
-  /// The unique identifier for this order.
   final String orderId;
-
-  /// List of cart items, each represented as a Map containing product details.
   final List<Map<String, dynamic>> cartItems;
-
-  /// The subtotal amount for all items in the cart.
   final double subtotal;
-
-  /// Firestore user ID for associating the order with the logged-in user.
   final String userId;
 
-  /// Creates an OrderCheckout page.
-  ///
-  /// All fields are required to ensure proper functionality.
   const OrderCheckout({
     super.key,
     required this.orderId,
@@ -43,38 +23,17 @@ class OrderCheckout extends StatefulWidget {
 }
 
 class _OrderCheckoutState extends State<OrderCheckout> {
-  /// Global key to validate the checkout form.
   final _formKey = GlobalKey<FormState>();
-
-  /// Controller for the customer's full name input field.
   final nameController = TextEditingController();
-
-  /// Controller for the customer's delivery address input field.
   final addressController = TextEditingController();
-
-  /// Controller for the customer's email input field.
   final emailController = TextEditingController();
-
-  /// Controller for the customer's phone number input field.
   final numberController = TextEditingController();
-
-  /// Selected payment method from the dropdown.
   String? selectedPayment;
 
-  /// List of supported payment methods.
   final paymentMethods = ["Online Banking", "Credit Card", "E-Wallet"];
 
-  /// Computes the total amount payable including subtotal and additional charges.
-  ///
-  /// Currently, no additional charges are applied (delivery fee = 0.0).
   double get totalPay => widget.subtotal + 0.0;
 
-  /// Returns the channel code required by the payment gateway for [method].
-  ///
-  /// - "DD" → Online Banking
-  /// - "CC" → Credit Card
-  /// - "EW" → E-Wallet
-  /// Defaults to "CC" if method is unrecognized.
   String getChannelCode(String method) {
     switch (method) {
       case "Online Banking":
@@ -88,7 +47,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     }
   }
 
-  /// Handles full checkout process: validate, save to Firestore, then initiate payment.
   Future<void> _handlePay() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -100,14 +58,12 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     }
 
     try {
-      // Show loading message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Processing your order...")),
       );
 
       final txChannel = getChannelCode(selectedPayment!);
 
-      // Construct order document for Firestore
       final orderData = {
         "merchantId": "91012387",
         "txType": "SALE",
@@ -135,13 +91,11 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         "createdAt": DateTime.now(),
       };
 
-      // Step 1: Save order to Firestore
       await FirebaseFirestore.instance
           .collection('orders')
           .doc(widget.orderId)
           .set(orderData);
 
-      // Step 2: Call payment API
       final response = await CallApi.processPayment(
         totalAmount: totalPay,
         paymentMethod: selectedPayment!,
@@ -156,7 +110,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         userId: widget.userId,
       );
 
-      // Step 3: Redirect to payment page
       if (response != null && response.containsKey("checkoutUrl")) {
         final checkoutUrl = response["checkoutUrl"];
         final txId = response["txId"] ?? "TX_UNKNOWN";
@@ -174,7 +127,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
           ),
         );
       } else {
-        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -185,41 +137,93 @@ class _OrderCheckoutState extends State<OrderCheckout> {
       }
     } catch (e) {
       debugPrint("❌ Payment error: $e");
-      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Payment failed due to an unexpected error.")),
+        const SnackBar(
+            content: Text("Payment failed due to an unexpected error.")),
       );
     }
   }
 
-  /// Builds a reusable text form field with validation.
-  Widget _buildTextField(String label, TextEditingController controller) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: TextFormField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            labelText: label,
-            labelStyle: const TextStyle(color: Colors.white),
-            enabledBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.white24),
-            ),
-            focusedBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.redAccent),
-            ),
-          ),
-          validator: (v) => v!.isEmpty ? "Please enter $label" : null,
-        ),
-      );
+  /// Custom validator for each input field
+  String? _validateField(String label, String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return "Please enter your $label";
+    }
 
-  /// Builds the cart summary widget showing all items, subtotal, and total payable.
+    switch (label) {
+      case "Full Name":
+        // Must contain at least 2 words, each 2+ letters
+        if (!RegExp(r"^[A-Za-z]+(?: [A-Za-z]+)+$").hasMatch(value.trim())) {
+          return "Please enter your full name (first and last name).";
+        }
+        if (value.trim().length < 5) {
+          return "Name must be at least 5 characters long.";
+        }
+        break;
+
+      case "Email":
+        if (!RegExp(r"^[\w\.-]+@[\w\.-]+\.\w+$").hasMatch(value.trim())) {
+          return "Please enter a valid email address.";
+        }
+        break;
+
+      case "Phone Number":
+        if (!RegExp(r"^[0-9]{8,11}$").hasMatch(value.trim())) {
+          return "Phone number must contain only digits (8–11 digits).";
+        }
+        break;
+
+      case "Address":
+        // Require letters and numbers, at least 10 chars, and some structure
+        if (value.trim().length < 10) {
+          return "Address must be at least 10 characters long.";
+        }
+        if (!RegExp(r"^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9\s,.'-]+$")
+            .hasMatch(value.trim())) {
+          return "Address should include both letters and numbers.";
+        }
+        if (!value.contains(' ') && !value.contains(',')) {
+          return "Please enter a more complete address (e.g., street and number).";
+        }
+        break;
+    }
+
+    return null; // valid
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white),
+          enabledBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: Colors.white24),
+          ),
+          focusedBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: Colors.redAccent),
+          ),
+        ),
+        validator: (v) => _validateField(label, v),
+      ),
+    );
+  }
+
   Widget _buildCartSummary() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Items to Checkout",
-            style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        const Text(
+          "Items to Checkout",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         const SizedBox(height: 10),
         ...widget.cartItems.map(
           (item) => Card(
@@ -232,8 +236,10 @@ class _OrderCheckoutState extends State<OrderCheckout> {
                 height: 50,
                 fit: BoxFit.cover,
               ),
-              title:
-                  Text(item["name"], style: const TextStyle(color: Colors.white)),
+              title: Text(
+                item["name"],
+                style: const TextStyle(color: Colors.white),
+              ),
               subtitle: Text(
                 "Qty: ${item["quantity"]} | RM ${item["price"].toStringAsFixed(2)}",
                 style: const TextStyle(color: Colors.white70),
@@ -244,10 +250,15 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         const SizedBox(height: 10),
         Text("Subtotal: RM ${widget.subtotal.toStringAsFixed(2)}",
             style: const TextStyle(color: Colors.white)),
-        Text("Delivery: RM 0.00", style: const TextStyle(color: Colors.white)),
-        Text("Total Pay: RM ${totalPay.toStringAsFixed(2)}",
-            style: const TextStyle(
-                color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+        const Text("Delivery: RM 0.00",
+            style: TextStyle(color: Colors.white)),
+        Text(
+          "Total Pay: RM ${totalPay.toStringAsFixed(2)}",
+          style: const TextStyle(
+            color: Colors.greenAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ],
     );
   }
@@ -267,16 +278,16 @@ class _OrderCheckoutState extends State<OrderCheckout> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Order ID: ${widget.orderId}",
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(
+                "Order ID: ${widget.orderId}",
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
               const SizedBox(height: 10),
               _buildTextField("Full Name", nameController),
               _buildTextField("Address", addressController),
               _buildTextField("Email", emailController),
               _buildTextField("Phone Number", numberController),
               const SizedBox(height: 16),
-
-              // Dropdown for selecting payment method
               DropdownButtonFormField<String>(
                 value: selectedPayment,
                 decoration: const InputDecoration(
@@ -288,38 +299,37 @@ class _OrderCheckoutState extends State<OrderCheckout> {
                     .map(
                       (m) => DropdownMenuItem(
                         value: m,
-                        child: Text(m, style: const TextStyle(color: Colors.white)),
+                        child: Text(m,
+                            style: const TextStyle(color: Colors.white)),
                       ),
                     )
                     .toList(),
                 onChanged: (v) => setState(() => selectedPayment = v),
               ),
               const SizedBox(height: 20),
-
               _buildCartSummary(),
               const SizedBox(height: 30),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // Cancel button
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade900,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
                     onPressed: () => Navigator.pop(context),
-                    child:
-                        const Text("Cancel", style: TextStyle(fontSize: 16)),
+                    child: const Text("Cancel", style: TextStyle(fontSize: 16)),
                   ),
-
-                  // Single Pay Now button
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.greenAccent,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 14,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
