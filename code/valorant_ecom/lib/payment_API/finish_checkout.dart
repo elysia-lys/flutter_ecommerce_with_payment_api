@@ -107,8 +107,10 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
         "custContact": orderData?['custContact'] ?? '-',
         "address": orderData?['address'] ?? '-',
         "paymentMethod": getReadablePaymentMethod(orderData?['txChannel']),
+        "deliveryStatus": orderData?['deliveryStatus'] ?? "not_started",
         "paidAt": DateTime.now(),
       });
+
     }
 
     // ✅ After recording payment, remove purchased items from the user's cart.
