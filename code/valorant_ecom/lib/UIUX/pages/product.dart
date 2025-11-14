@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:valo/UIUX/login_credential/login.dart';
 import 'package:valo/main.dart';
+import 'package:valo/payment_API/order_checkout.dart';
 import '../pages/cart.dart';
 
-/// ProductPage displays detailed product info and allows
-/// adding to cart with live badge update.
+
 class ProductPage extends StatefulWidget {
   final Map<String, String> product;
 
@@ -24,7 +24,6 @@ class _ProductPageState extends State<ProductPage> {
   String? selectedMeasurement;
   String? userId;
 
-  // 🔒 Prevent double “Add to Cart” taps
   bool isAddingToCart = false;
 
   List<String> get colors => (widget.product['color'] ?? '')
@@ -81,7 +80,6 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Future<void> addToCart() async {
-    // 🔒 Prevent double press
     if (isAddingToCart) return;
     setState(() => isAddingToCart = true);
 
@@ -143,7 +141,6 @@ class _ProductPageState extends State<ProductPage> {
       );
     }
 
-    // ⏳ Re-enable button after 1 sec
     await Future.delayed(const Duration(seconds: 1));
     if (mounted) setState(() => isAddingToCart = false);
   }
@@ -297,25 +294,101 @@ class _ProductPageState extends State<ProductPage> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 🔴 Add to Cart Button with protection
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                          padding: const EdgeInsets.all(16),
+                    // Buttons Column
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent,
+                              padding: const EdgeInsets.all(16),
+                            ),
+                            onPressed: isAddingToCart ? null : addToCart,
+                            child: isAddingToCart
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2),
+                                  )
+                                : const Text('Add to Cart',
+                                    style: TextStyle(fontSize: 16)),
+                          ),
                         ),
-                        onPressed: isAddingToCart ? null : addToCart,
-                        child: isAddingToCart
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Text('Add to Cart',
-                                style: TextStyle(fontSize: 16)),
-                      ),
+                        const SizedBox(height: 10),
+                        // ✅ Checkout Now Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.greenAccent,
+                              padding: const EdgeInsets.all(16),
+                            ),
+                            onPressed: () {
+                              if (userId == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content:
+                                          Text('Please log in to proceed!')),
+                                );
+                                return;
+                              }
+
+                              if ((colors.isNotEmpty && selectedColor == null) ||
+                                  (sizes.isNotEmpty && selectedSize == null) ||
+                                  (measurements.isNotEmpty &&
+                                      selectedMeasurement == null)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Please select all required options!')),
+                                );
+                                return;
+                              }
+
+                              double price = 0;
+                              try {
+                                price = double.parse((widget.product['price'] ??
+                                        '0')
+                                    .replaceAll(RegExp(r'[^0-9.]'), ''));
+                              } catch (_) {}
+
+                              final orderId =
+                                  DateTime.now().millisecondsSinceEpoch.toString();
+
+                              final cartItem = {
+                                "id": _generateCartDocId(),
+                                "name": widget.product['name'] ?? '',
+                                "quantity": quantity,
+                                "price": price,
+                                "image":
+                                    widget.product['image'] ?? '',
+                                "color": selectedColor ?? '',
+                                "size": selectedSize ?? '',
+                                "measurement": selectedMeasurement ?? '',
+                              };
+
+                              if (mounted) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderCheckout(
+                                      orderId: orderId,
+                                      cartItems: [cartItem],
+                                      subtotal: price * quantity,
+                                      userId: userId!,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text('Checkout Now',
+                                style: TextStyle(
+                                    fontSize: 16, color: Colors.black)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
