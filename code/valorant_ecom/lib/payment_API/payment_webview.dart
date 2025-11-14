@@ -47,15 +47,40 @@ class _PaymentWebViewState extends State<PaymentWebView> {
   }
 
   // ---------------------------------------------
-  // HARDWARE BACK BUTTON HANDLING
+  // BACK BUTTON HANDLING
   // ---------------------------------------------
   Future<bool> _onWillPop() async {
-    _handlePaymentResult(false); // treat as failed
-    return false; // prevent default pop
+    return await _showCancelConfirmation();
+  }
+
+  Future<bool> _showCancelConfirmation() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Cancel Payment"),
+        content: const Text("Are you sure you want to cancel payment?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      _handlePaymentResult(false); // treat as failed
+      return false; // prevent pop since we handle navigation inside _handlePaymentResult
+    }
+
+    return false; // just stay on the page
   }
 
   // ---------------------------------------------
-
   void _startPolling() {
     pollingTimer?.cancel();
     pollAttempts = 0;
@@ -159,16 +184,15 @@ class _PaymentWebViewState extends State<PaymentWebView> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(   // <-- catches phone back button
+    return WillPopScope(
       onWillPop: _onWillPop,
-
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Complete Payment"),
           backgroundColor: Colors.black87,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => _handlePaymentResult(false),
+            onPressed: _showCancelConfirmation, // <-- show confirmation
           ),
         ),
         body: Stack(
@@ -201,9 +225,7 @@ class _PaymentWebViewState extends State<PaymentWebView> {
                 }
               },
             ),
-
-            if (progress < 1.0)
-              LinearProgressIndicator(value: progress),
+            if (progress < 1.0) LinearProgressIndicator(value: progress),
           ],
         ),
       ),
