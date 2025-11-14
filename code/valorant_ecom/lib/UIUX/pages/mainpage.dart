@@ -141,8 +141,14 @@ class _MainPageState extends State<MainPage> {
     setState(() => likedProducts.remove(productId));
   }
 
-  /// Handles Android back button
+  /// Handle Android back button → ONLY show exit dialog at root
   Future<bool> _onWillPop() async {
+    // If there are pages to pop (not root), allow normal back
+    if (Navigator.of(context).canPop()) {
+      return true;
+    }
+
+    // If at root → show exit confirmation
     final shouldExit = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
