@@ -24,6 +24,9 @@ class _ProductPageState extends State<ProductPage> {
   String? selectedMeasurement;
   String? userId;
 
+  // 🔒 Prevent double “Add to Cart” taps
+  bool isAddingToCart = false;
+
   List<String> get colors => (widget.product['color'] ?? '')
       .split(',')
       .map((e) => e.trim())
@@ -78,10 +81,15 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Future<void> addToCart() async {
+    // 🔒 Prevent double press
+    if (isAddingToCart) return;
+    setState(() => isAddingToCart = true);
+
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please log in to add to cart!')),
       );
+      setState(() => isAddingToCart = false);
       return;
     }
 
@@ -91,6 +99,7 @@ class _ProductPageState extends State<ProductPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select all required options!')),
       );
+      setState(() => isAddingToCart = false);
       return;
     }
 
@@ -126,7 +135,6 @@ class _ProductPageState extends State<ProductPage> {
       });
     }
 
-    // Update global cart badge immediately
     await _updateCartBadge();
 
     if (mounted) {
@@ -134,6 +142,10 @@ class _ProductPageState extends State<ProductPage> {
         const SnackBar(content: Text('Added to cart!')),
       );
     }
+
+    // ⏳ Re-enable button after 1 sec
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) setState(() => isAddingToCart = false);
   }
 
   Future<void> _updateCartBadge() async {
@@ -152,7 +164,7 @@ class _ProductPageState extends State<ProductPage> {
 
     return WillPopScope(
       onWillPop: () async {
-        await _updateCartBadge(); // refresh badge on back
+        await _updateCartBadge();
         return true;
       },
       child: Scaffold(
@@ -162,14 +174,15 @@ class _ProductPageState extends State<ProductPage> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.redAccent),
             onPressed: () async {
-              await _updateCartBadge(); // refresh badge on back
+              await _updateCartBadge();
               Navigator.pop(context);
             },
           ),
           title: Text(product['name'] ?? 'Product'),
         ),
         body: userId == null
-            ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
+            ? const Center(
+                child: CircularProgressIndicator(color: Colors.redAccent))
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -186,23 +199,33 @@ class _ProductPageState extends State<ProductPage> {
                     const SizedBox(height: 20),
                     Text(product['name'] ?? '',
                         style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
                     const SizedBox(height: 8),
                     Text(product['price'] ?? '',
-                        style: const TextStyle(fontSize: 18, color: Colors.redAccent)),
+                        style: const TextStyle(
+                            fontSize: 18, color: Colors.redAccent)),
                     const SizedBox(height: 16),
                     Text(product['desc'] ?? '',
-                        style: const TextStyle(fontSize: 14, color: Colors.white70)),
+                        style: const TextStyle(
+                            fontSize: 14, color: Colors.white70)),
                     const SizedBox(height: 20),
 
                     if (colors.isNotEmpty) ...[
-                      const Text('Color:', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      const Text('Color:',
+                          style: TextStyle(color: Colors.white, fontSize: 16)),
                       DropdownButton<String>(
                         value: selectedColor,
                         dropdownColor: Colors.black,
-                        hint: const Text('Select Color', style: TextStyle(color: Colors.white70)),
+                        hint: const Text('Select Color',
+                            style: TextStyle(color: Colors.white70)),
                         items: colors
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(color: Colors.white))))
+                            .map((c) => DropdownMenuItem(
+                                value: c,
+                                child: Text(c,
+                                    style:
+                                        const TextStyle(color: Colors.white))))
                             .toList(),
                         onChanged: (v) => setState(() => selectedColor = v),
                       ),
@@ -210,13 +233,19 @@ class _ProductPageState extends State<ProductPage> {
                     ],
 
                     if (sizes.isNotEmpty) ...[
-                      const Text('Size:', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      const Text('Size:',
+                          style: TextStyle(color: Colors.white, fontSize: 16)),
                       DropdownButton<String>(
                         value: selectedSize,
                         dropdownColor: Colors.black,
-                        hint: const Text('Select Size', style: TextStyle(color: Colors.white70)),
+                        hint: const Text('Select Size',
+                            style: TextStyle(color: Colors.white70)),
                         items: sizes
-                            .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(color: Colors.white))))
+                            .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(s,
+                                    style:
+                                        const TextStyle(color: Colors.white))))
                             .toList(),
                         onChanged: (v) => setState(() => selectedSize = v),
                       ),
@@ -224,28 +253,42 @@ class _ProductPageState extends State<ProductPage> {
                     ],
 
                     if (measurements.isNotEmpty) ...[
-                      const Text('Measurement:', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      const Text('Measurement:',
+                          style: TextStyle(color: Colors.white, fontSize: 16)),
                       DropdownButton<String>(
                         value: selectedMeasurement,
                         dropdownColor: Colors.black,
-                        hint: const Text('Select Measurement', style: TextStyle(color: Colors.white70)),
+                        hint: const Text('Select Measurement',
+                            style: TextStyle(color: Colors.white70)),
                         items: measurements
-                            .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(color: Colors.white))))
+                            .map((m) => DropdownMenuItem(
+                                value: m,
+                                child: Text(m,
+                                    style:
+                                        const TextStyle(color: Colors.white))))
                             .toList(),
-                        onChanged: (v) => setState(() => selectedMeasurement = v),
+                        onChanged: (v) =>
+                            setState(() => selectedMeasurement = v),
                       ),
                       const SizedBox(height: 20),
                     ],
 
                     Row(
                       children: [
-                        const Text('Quantity:', style: TextStyle(color: Colors.white, fontSize: 16)),
+                        const Text('Quantity:',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 16)),
                         const SizedBox(width: 10),
                         IconButton(
-                          icon: const Icon(Icons.remove, color: Colors.white),
-                          onPressed: quantity > 1 ? () => setState(() => quantity--) : null,
+                          icon:
+                              const Icon(Icons.remove, color: Colors.white),
+                          onPressed: quantity > 1
+                              ? () => setState(() => quantity--)
+                              : null,
                         ),
-                        Text('$quantity', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                        Text('$quantity',
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 16)),
                         IconButton(
                           icon: const Icon(Icons.add, color: Colors.white),
                           onPressed: () => setState(() => quantity++),
@@ -254,6 +297,7 @@ class _ProductPageState extends State<ProductPage> {
                     ),
                     const SizedBox(height: 20),
 
+                    // 🔴 Add to Cart Button with protection
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -261,8 +305,16 @@ class _ProductPageState extends State<ProductPage> {
                           backgroundColor: Colors.redAccent,
                           padding: const EdgeInsets.all(16),
                         ),
-                        onPressed: addToCart,
-                        child: const Text('Add to Cart', style: TextStyle(fontSize: 16)),
+                        onPressed: isAddingToCart ? null : addToCart,
+                        child: isAddingToCart
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Add to Cart',
+                                style: TextStyle(fontSize: 16)),
                       ),
                     ),
                   ],
