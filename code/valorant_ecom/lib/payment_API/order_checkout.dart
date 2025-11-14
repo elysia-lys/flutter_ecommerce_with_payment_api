@@ -87,7 +87,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
                 })
             .toList(),
         "status": "pending_payment",
-        "deliveryStatus": "not_started",
         "createdAt": DateTime.now(),
       };
 
@@ -144,7 +143,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     }
   }
 
-  /// Custom validator for each input field
   String? _validateField(String label, String? value) {
     if (value == null || value.trim().isEmpty) {
       return "Please enter your $label";
@@ -152,7 +150,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
 
     switch (label) {
       case "Full Name":
-        // Must contain at least 2 words, each 2+ letters
         if (!RegExp(r"^[A-Za-z]+(?: [A-Za-z]+)+$").hasMatch(value.trim())) {
           return "Please enter your full name (first and last name).";
         }
@@ -174,7 +171,6 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         break;
 
       case "Address":
-        // Require letters and numbers, at least 10 chars, and some structure
         if (value.trim().length < 10) {
           return "Address must be at least 10 characters long.";
         }
@@ -188,7 +184,7 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         break;
     }
 
-    return null; // valid
+    return null;
   }
 
   Widget _buildTextField(String label, TextEditingController controller) {

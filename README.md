@@ -23,6 +23,13 @@ This is an e-commerce project using flutter to create an workable andriod applic
 - finish_checkout.dart
 ##### These files are important for the linking between e-commerce and payment gateway
 ---
+#### For firebase
+There is 1 collection in firebase call "paidProducts". 
+
+The delivery status in paidProducts can vary by 'admin' changing it manually
+- not_started
+- delivering
+- Completed (this will automatically set when user click 'order receive' button)
 ### For more info about flutter: 
 - https://docs.flutter.dev/ flutter docs
 - https://docs.flutter.dev/get-started/codelab write your first app with flutter tutorial
