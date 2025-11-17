@@ -7,7 +7,6 @@ import 'package:valo/main.dart';
 import 'package:valo/payment_API/order_checkout.dart';
 import '../pages/cart.dart';
 
-
 class ProductPage extends StatefulWidget {
   final Map<String, String> product;
 
@@ -79,8 +78,29 @@ class _ProductPageState extends State<ProductPage> {
     return '${name}_$color$size$measurement';
   }
 
+  Future<void> _showMaxQtyDialog() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Maximum Quantity Exceeded'),
+        content: const Text('The maximum quantity allowed is 100. Please reduce the quantity.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> addToCart() async {
     if (isAddingToCart) return;
+    if (quantity > 100) {
+      await _showMaxQtyDialog();
+      return;
+    }
+
     setState(() => isAddingToCart = true);
 
     if (userId == null) {
@@ -153,6 +173,61 @@ class _ProductPageState extends State<ProductPage> {
         .collection('cart')
         .get();
     cartCountNotifier.value = snapshot.docs.length;
+  }
+
+  void _checkoutNow() async {
+    if (quantity > 100) {
+      await _showMaxQtyDialog();
+      return;
+    }
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to proceed!')),
+      );
+      return;
+    }
+
+    if ((colors.isNotEmpty && selectedColor == null) ||
+        (sizes.isNotEmpty && selectedSize == null) ||
+        (measurements.isNotEmpty && selectedMeasurement == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select all required options!')),
+      );
+      return;
+    }
+
+    double price = 0;
+    try {
+      price = double.parse((widget.product['price'] ?? '0').replaceAll(RegExp(r'[^0-9.]'), ''));
+    } catch (_) {}
+
+    final orderId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    final cartItem = {
+      "id": _generateCartDocId(),
+      "name": widget.product['name'] ?? '',
+      "quantity": quantity,
+      "price": price,
+      "image": widget.product['image'] ?? '',
+      "color": selectedColor ?? '',
+      "size": selectedSize ?? '',
+      "measurement": selectedMeasurement ?? '',
+    };
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrderCheckout(
+            orderId: orderId,
+            cartItems: [cartItem],
+            subtotal: price * quantity,
+            userId: userId!,
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -270,29 +345,38 @@ class _ProductPageState extends State<ProductPage> {
                       const SizedBox(height: 20),
                     ],
 
-                    Row(
+                    // Quantity (editable)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Quantity:',
-                            style:
-                                TextStyle(color: Colors.white, fontSize: 16)),
-                        const SizedBox(width: 10),
-                        IconButton(
-                          icon:
-                              const Icon(Icons.remove, color: Colors.white),
-                          onPressed: quantity > 1
-                              ? () => setState(() => quantity--)
-                              : null,
+                            style: TextStyle(color: Colors.white, fontSize: 16)),
+                        const SizedBox(height: 5),
+                        SizedBox(
+                          width: 100,
+                          child: TextFormField(
+                            initialValue: quantity.toString(),
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.grey[900],
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(5)),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                            ),
+                            onChanged: (val) {
+                              final parsed = int.tryParse(val);
+                              if (parsed != null && parsed > 0) {
+                                setState(() => quantity = parsed);
+                              }
+                            },
+                          ),
                         ),
-                        Text('$quantity',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 16)),
-                        IconButton(
-                          icon: const Icon(Icons.add, color: Colors.white),
-                          onPressed: () => setState(() => quantity++),
-                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
-                    const SizedBox(height: 20),
 
                     // Buttons Column
                     Column(
@@ -317,7 +401,6 @@ class _ProductPageState extends State<ProductPage> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // ✅ Checkout Now Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -325,67 +408,10 @@ class _ProductPageState extends State<ProductPage> {
                               backgroundColor: Colors.greenAccent,
                               padding: const EdgeInsets.all(16),
                             ),
-                            onPressed: () {
-                              if (userId == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content:
-                                          Text('Please log in to proceed!')),
-                                );
-                                return;
-                              }
-
-                              if ((colors.isNotEmpty && selectedColor == null) ||
-                                  (sizes.isNotEmpty && selectedSize == null) ||
-                                  (measurements.isNotEmpty &&
-                                      selectedMeasurement == null)) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'Please select all required options!')),
-                                );
-                                return;
-                              }
-
-                              double price = 0;
-                              try {
-                                price = double.parse((widget.product['price'] ??
-                                        '0')
-                                    .replaceAll(RegExp(r'[^0-9.]'), ''));
-                              } catch (_) {}
-
-                              final orderId =
-                                  DateTime.now().millisecondsSinceEpoch.toString();
-
-                              final cartItem = {
-                                "id": _generateCartDocId(),
-                                "name": widget.product['name'] ?? '',
-                                "quantity": quantity,
-                                "price": price,
-                                "image":
-                                    widget.product['image'] ?? '',
-                                "color": selectedColor ?? '',
-                                "size": selectedSize ?? '',
-                                "measurement": selectedMeasurement ?? '',
-                              };
-
-                              if (mounted) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => OrderCheckout(
-                                      orderId: orderId,
-                                      cartItems: [cartItem],
-                                      subtotal: price * quantity,
-                                      userId: userId!,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
+                            onPressed: _checkoutNow,
                             child: const Text('Checkout Now',
-                                style: TextStyle(
-                                    fontSize: 16, color: Colors.black)),
+                                style:
+                                    TextStyle(fontSize: 16, color: Colors.black)),
                           ),
                         ),
                       ],

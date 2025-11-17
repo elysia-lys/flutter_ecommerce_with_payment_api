@@ -88,6 +88,24 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
   }
 
   Future<void> saveChanges() async {
+    // Max quantity check
+    if (quantity > 100) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Maximum Quantity Exceeded'),
+          content: const Text('The maximum quantity allowed is 100. Please reduce the quantity.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return; // stop saving until quantity <= 100
+    }
+
     final newCartId = _generateCartId();
     final userCartRef = FirebaseFirestore.instance
         .collection('users')
@@ -202,22 +220,35 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
                   _buildDropdown("Size", sizes, selectedSize, (v) => setState(() => selectedSize = v)),
                   _buildDropdown("Measurement", measurements, selectedMeasurement, (v) => setState(() => selectedMeasurement = v)),
 
-                  // Quantity
-                  Row(
+                  // Quantity (editable)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text("Quantity:", style: TextStyle(color: Colors.white, fontSize: 16)),
-                      IconButton(
-                        icon: const Icon(Icons.remove, color: Colors.white),
-                        onPressed: quantity > 1 ? () => setState(() => quantity--) : null,
+                      const SizedBox(height: 5),
+                      SizedBox(
+                        width: 100,
+                        child: TextFormField(
+                          initialValue: quantity.toString(),
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.grey[900],
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                          ),
+                          onChanged: (val) {
+                            final parsed = int.tryParse(val);
+                            if (parsed != null && parsed > 0) {
+                              setState(() => quantity = parsed);
+                            }
+                          },
+                        ),
                       ),
-                      Text("$quantity", style: const TextStyle(color: Colors.white, fontSize: 16)),
-                      IconButton(
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        onPressed: () => setState(() => quantity++),
-                      ),
+                      const SizedBox(height: 20),
                     ],
                   ),
-                  const SizedBox(height: 20),
 
                   // Save Button
                   SizedBox(
