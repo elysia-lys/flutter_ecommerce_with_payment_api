@@ -23,6 +23,15 @@ This is an e-commerce project using flutter to create an workable andriod applic
 - finish_checkout.dart
 ##### These files are important for the linking between e-commerce and payment gateway
 ---
+#### When starting and running the program
+You can just run & debugged, but it will take quite some time for it to load finish.
+
+So, you can just run, to create the build file
+
+Then stop running can type 'flutter run --' on your terminal
+
+It should start the app faster than running 'run & debugged' 
+
 #### For firebase
 There is 1 collection in firebase call "paidProducts". 
 
