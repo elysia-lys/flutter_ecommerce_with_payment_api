@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:valo/UIUX/pages/edit_cart_item.dart';
 import 'package:valo/payment_API/order_checkout.dart';
 import '../../main.dart'; // SafeImage widget
 import '../layout/layout.dart'; // Shared layout
@@ -30,7 +31,8 @@ class _CartPageState extends State<CartPage> {
 
   Future<void> _checkLoginStatus() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('users').get();
+      final snapshot =
+          await FirebaseFirestore.instance.collection('users').get();
       final docs = snapshot.docs.where((doc) => doc.data()['loggedIn'] == true);
       final loggedInUser = docs.isNotEmpty ? docs.first : null;
 
@@ -123,8 +125,8 @@ class _CartPageState extends State<CartPage> {
         .fold(0.0, (sum, item) => sum + (item['price'] * item['quantity']));
   }
 
-  Future<String> _generateOrderId(
-      String userId, List<Map<String, dynamic>> selectedItems, double totalPrice) async {
+  Future<String> _generateOrderId(String userId,
+      List<Map<String, dynamic>> selectedItems, double totalPrice) async {
     final orderId = "order${DateTime.now().millisecondsSinceEpoch}";
 
     await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
@@ -146,7 +148,8 @@ class _CartPageState extends State<CartPage> {
     if (isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.redAccent)),
+        body:
+            Center(child: CircularProgressIndicator(color: Colors.redAccent)),
       );
     }
 
@@ -203,69 +206,116 @@ class _CartPageState extends State<CartPage> {
                   itemCount: cartItems.length,
                   itemBuilder: (context, index) {
                     final item = cartItems[index];
-                    return Card(
-                      color: Colors.grey[900],
-                      margin:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Checkbox(
-                              value: item['selected'] ?? true,
-                              onChanged: (v) =>
-                                  toggleItemSelection(item['id'], v ?? false),
-                              activeColor: Colors.redAccent,
+
+                    /// Build details string: color / size / measurement
+                    final detailsList = [
+                      if ((item['color'] ?? '').isNotEmpty) item['color'],
+                      if ((item['size'] ?? '').isNotEmpty) item['size'],
+                      if ((item['measurement'] ?? '').isNotEmpty)
+                        item['measurement'],
+                    ];
+                    final details = detailsList.join(' / ');
+
+                    return GestureDetector(
+                      onTap: () async {
+                        /// Open EditCartItemPage
+                        final updated = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EditCartItemPage(
+                              userId: userId!,
+                              cartDocId: item['id'],
+                              item: item,
                             ),
-                            SafeImage(item['image'] ?? '',
-                                width: 50, height: 50, fit: BoxFit.cover),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item['name'] ?? '',
-                                      style: const TextStyle(color: Colors.white)),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                      "\$${item['price']} x ${item['quantity']}",
-                                      style: const TextStyle(
-                                          color: Colors.white70)),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.remove,
-                                            color: Colors.redAccent),
-                                        onPressed: () => updateQuantity(
-                                            item['id'], item['quantity'] - 1),
-                                      ),
-                                      Text("${item['quantity']}",
-                                          style: const TextStyle(
-                                              color: Colors.white, fontSize: 16)),
-                                      IconButton(
-                                        icon: const Icon(Icons.add,
-                                            color: Colors.greenAccent),
-                                        onPressed: () => updateQuantity(
-                                            item['id'], item['quantity'] + 1),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                          ),
+                        );
+
+                        if (updated == true && mounted) {
+                          setState(() {});
+                          _updateCartCount();
+                        }
+                      },
+
+                      child: Card(
+                        color: Colors.grey[900],
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: item['selected'] ?? true,
+                                onChanged: (v) => toggleItemSelection(
+                                    item['id'], v ?? false),
+                                activeColor: Colors.redAccent,
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.redAccent),
-                              onPressed: () => deleteItem(item['id']),
-                            ),
-                          ],
+                              SafeImage(item['image'] ?? '',
+                                  width: 50, height: 50, fit: BoxFit.cover),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['name'] ?? '',
+                                        style: const TextStyle(
+                                            color: Colors.white)),
+                                    if (details.isNotEmpty)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(top: 2.0),
+                                        child: Text(
+                                          details,
+                                          style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 14),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 5),
+                                    Text("\$${item['price']} x ${item['quantity']}",
+                                        style: const TextStyle(
+                                            color: Colors.white70)),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove,
+                                              color: Colors.redAccent),
+                                          onPressed: () => updateQuantity(
+                                              item['id'],
+                                              item['quantity'] - 1),
+                                        ),
+                                        Text("${item['quantity']}",
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16)),
+                                        IconButton(
+                                          icon: const Icon(Icons.add,
+                                              color: Colors.greenAccent),
+                                          onPressed: () => updateQuantity(
+                                              item['id'],
+                                              item['quantity'] + 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon:
+                                    const Icon(Icons.delete, color: Colors.redAccent),
+                                onPressed: () => deleteItem(item['id']),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
                   },
                 ),
               ),
+
+              // Bottom Summary + Checkout button
               Padding(
                 padding: const EdgeInsets.only(bottom: 20),
                 child: Container(
@@ -292,9 +342,11 @@ class _CartPageState extends State<CartPage> {
                       const Text("Select All",
                           style: TextStyle(color: Colors.white)),
                       const Spacer(),
-                      Text("Total: \$${totalPrice.toStringAsFixed(2)}",
-                          style: const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.bold)),
+                      Text(
+                        "Total: \$${totalPrice.toStringAsFixed(2)}",
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(width: 12),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
@@ -308,6 +360,7 @@ class _CartPageState extends State<CartPage> {
                             ? () async {
                                 final orderId = await _generateOrderId(
                                     userId!, selectedItems, totalPrice);
+
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
