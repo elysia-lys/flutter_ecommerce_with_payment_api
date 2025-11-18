@@ -39,6 +39,11 @@ The delivery status in paidProducts can vary by 'admin' changing it manually
 - not_started
 - delivering
 - Completed (this will automatically set when user click 'order receive' button)
+
+#### Andriod version
+Andriod version below 9, is not compatible, it may be because of the dart versions
+
+but the payment SSL certificate is now, hence it may also not work when it reach the payment part. 
 ### For more info about flutter: 
 - https://docs.flutter.dev/ flutter docs
 - https://docs.flutter.dev/get-started/codelab write your first app with flutter tutorial
