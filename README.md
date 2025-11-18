@@ -28,7 +28,7 @@ You can just run & debugged, but it will take quite some time for it to load fin
 
 So, you can just run, to create the build file
 
-Then stop running can type 'flutter run --' on your terminal
+Then stop running and type 'flutter run --' on your terminal
 
 It should start the app faster than running 'run & debugged' 
 
@@ -43,7 +43,7 @@ The delivery status in paidProducts can vary by 'admin' changing it manually
 #### Andriod version
 Andriod version below 9, is not compatible, it may be because of the dart versions
 
-but the payment SSL certificate is now, hence it may also not work when it reach the payment part. 
+but the payment SSL certificate is new, hence it may also not work when it reach the payment part. 
 ### For more info about flutter: 
 - https://docs.flutter.dev/ flutter docs
 - https://docs.flutter.dev/get-started/codelab write your first app with flutter tutorial
