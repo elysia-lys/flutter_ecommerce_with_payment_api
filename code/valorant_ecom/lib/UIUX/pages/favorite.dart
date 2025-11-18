@@ -1,14 +1,25 @@
+// ==============================
+// FAVORITE PAGE
+// Displays the user's favorite products
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/product.dart';// ProductPage import
-import '../../main.dart'; // SafeImage widget import
-import '../layout/layout.dart';
+import 'package:valo/UIUX/pages/product.dart'; // ProductPage for product details
+import '../../main.dart'; // SafeImage widget
+import '../layout/layout.dart'; // Shared AppLayout
 
-/// A page that displays the list of favorite products saved by a logged-in user.
+// ==============================
+// FAVORITE PAGE WIDGET
+// ==============================
+
+/// FavoritePage displays all products the logged-in user has liked.
 ///
-/// The [FavoritePage] fetches and listens to real-time updates from Firestore,
-/// specifically the `favorites` subcollection under the logged-in user’s document.
-/// Users can view, open, and remove their favorite items from this page.
+/// Features:
+/// - Fetches logged-in user ID from Firestore
+/// - Streams real-time updates of user's `favorites` collection
+/// - Displays products in a responsive grid
+/// - Allows removing products from favorites
 class FavoritePage extends StatefulWidget {
   const FavoritePage({super.key});
 
@@ -16,29 +27,31 @@ class FavoritePage extends StatefulWidget {
   State<FavoritePage> createState() => _FavoritePageState();
 }
 
-/// State class for [FavoritePage].
-///
-/// This class manages fetching the logged-in user ID, retrieving
-/// favorite products, and handling user interactions such as removing favorites.
+// ==============================
+// STATE CLASS
+// ==============================
+
 class _FavoritePageState extends State<FavoritePage> {
-  /// Stores the currently logged-in Firestore user’s document ID.
+  /// Stores the logged-in Firestore user's document ID
   String? _userId;
 
   @override
   void initState() {
     super.initState();
-    _fetchLoggedInUserId();
+    _fetchLoggedInUserId(); // Fetch user on page load
   }
+
+  // ==============================
+  // FETCH LOGGED-IN USER
+  // ==============================
 
   /// Fetches the Firestore document ID of the currently logged-in user.
   ///
-  /// Checks the `users` collection for any document where the `loggedIn` field
-  /// is set to `true`. If a logged-in user is found, their document ID is stored
-  /// in [_userId]. Otherwise, a debug warning is printed.
+  /// Searches `users` collection for a document with `loggedIn` == true.
+  /// If found, sets `_userId`, otherwise prints debug warning.
   Future<void> _fetchLoggedInUserId() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
-
       final docs = snapshot.docs.where((doc) => doc.data()['loggedIn'] == true);
       final loggedInUser = docs.isNotEmpty ? docs.first : null;
 
@@ -50,14 +63,17 @@ class _FavoritePageState extends State<FavoritePage> {
         debugPrint("⚠️ No user is logged in.");
       }
     } catch (e) {
-      debugPrint('⚠️ Error checking login status: $e');
+      debugPrint('⚠️ Error fetching logged-in user: $e');
     }
   }
 
-  /// A real-time Firestore stream that provides updates to the user's favorite items.
+  // ==============================
+  // FIRESTORE STREAM
+  // ==============================
+
+  /// Returns a real-time stream of the user's favorite products.
   ///
-  /// Returns a [Stream] of [QuerySnapshot] objects that listen to the `favorites`
-  /// subcollection under the logged-in user's document.
+  /// Listens to `favorites` subcollection under the logged-in user's document.
   Stream<QuerySnapshot>? get favoriteStream {
     if (_userId == null) return null;
     return FirebaseFirestore.instance
@@ -68,12 +84,14 @@ class _FavoritePageState extends State<FavoritePage> {
         .snapshots();
   }
 
-  /// Removes a specific product from the user's list of favorites.
-  ///
-  /// Takes the [productId] as input and deletes the corresponding document
-  /// from the user's `favorites` subcollection in Firestore.
+  // ==============================
+  // REMOVE FAVORITE
+  // ==============================
+
+  /// Removes a product from favorites using its [productId].
   Future<void> removeFavorite(String productId) async {
     if (_userId == null) return;
+
     try {
       await FirebaseFirestore.instance
           .collection('users')
@@ -83,22 +101,26 @@ class _FavoritePageState extends State<FavoritePage> {
           .delete();
       debugPrint('🗑️ Removed favorite: $productId');
     } catch (e) {
-      debugPrint('🔥 Remove favorite error: $e');
+      debugPrint('🔥 Error removing favorite: $e');
     }
   }
 
-  /// Builds a card widget to display individual favorite product details.
+  // ==============================
+  // PRODUCT CARD
+  // ==============================
+
+  /// Builds a single product card for the favorite item.
   ///
-  /// Each card shows the product’s image, name, description, and price.
-  /// When tapped, the card navigates to the [ProductPage] for more details.
-  ///
-  /// A heart icon in the top-right corner allows removing the product
-  /// from the favorites list.
+  /// Features:
+  /// - Displays product image, name, description, price
+  /// - Tappable to navigate to ProductPage
+  /// - Heart icon to remove from favorites
   Widget buildProductCard(BuildContext context, QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
     return GestureDetector(
       onTap: () {
+        // Navigate to detailed ProductPage
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -121,6 +143,7 @@ class _FavoritePageState extends State<FavoritePage> {
       },
       child: Stack(
         children: [
+          // Product card container
           Container(
             width: 140,
             margin: const EdgeInsets.all(6),
@@ -128,15 +151,12 @@ class _FavoritePageState extends State<FavoritePage> {
             decoration: BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.redAccent,
-                width: 2,
-              ),
+              border: Border.all(color: Colors.redAccent, width: 2),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                /// Displays the product image safely using the [SafeImage] widget.
+                // Product image
                 SizedBox(
                   height: 100,
                   child: SafeImage(
@@ -146,7 +166,7 @@ class _FavoritePageState extends State<FavoritePage> {
                 ),
                 const SizedBox(height: 6),
 
-                /// Product name text (bold white).
+                // Product name
                 Text(
                   data['name'] ?? '',
                   style: const TextStyle(
@@ -158,7 +178,7 @@ class _FavoritePageState extends State<FavoritePage> {
                   overflow: TextOverflow.ellipsis,
                 ),
 
-                /// Short product description.
+                // Short description
                 Text(
                   data['desc'] ?? '',
                   style: const TextStyle(
@@ -169,7 +189,7 @@ class _FavoritePageState extends State<FavoritePage> {
                   overflow: TextOverflow.ellipsis,
                 ),
 
-                /// Product price in red.
+                // Price
                 Text(
                   data['price'] ?? '\$0',
                   style: const TextStyle(
@@ -181,7 +201,7 @@ class _FavoritePageState extends State<FavoritePage> {
             ),
           ),
 
-          /// Favorite (heart) icon positioned at the top-right corner.
+          // Favorite (heart) icon
           Positioned(
             top: 4,
             right: 4,
@@ -206,12 +226,13 @@ class _FavoritePageState extends State<FavoritePage> {
     );
   }
 
-  /// Builds the main UI for the FavoritePage.
-  ///
-  /// Displays a loading spinner while fetching data, an empty message if
-  /// no favorites exist, or a responsive grid of favorite product cards otherwise.
+  // ==============================
+  // BUILD PAGE
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
+    // Show loader until userId is fetched
     if (_userId == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -221,6 +242,7 @@ class _FavoritePageState extends State<FavoritePage> {
       );
     }
 
+    // Main layout using shared AppLayout
     return AppLayout(
       title: "My Favorites",
       appBarActions: const [],
@@ -229,6 +251,7 @@ class _FavoritePageState extends State<FavoritePage> {
         child: StreamBuilder<QuerySnapshot>(
           stream: favoriteStream,
           builder: (context, snapshot) {
+            // Show loading indicator while fetching data
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
                 child: CircularProgressIndicator(color: Colors.redAccent),
@@ -237,6 +260,7 @@ class _FavoritePageState extends State<FavoritePage> {
 
             final favoriteDocs = snapshot.data?.docs ?? [];
 
+            // Empty state
             if (favoriteDocs.isEmpty) {
               return const Center(
                 child: Text(
@@ -246,7 +270,7 @@ class _FavoritePageState extends State<FavoritePage> {
               );
             }
 
-            /// Displays all favorite items in a responsive wrap layout.
+            // Display favorite items in a responsive wrap
             return SingleChildScrollView(
               child: Wrap(
                 alignment: WrapAlignment.start,

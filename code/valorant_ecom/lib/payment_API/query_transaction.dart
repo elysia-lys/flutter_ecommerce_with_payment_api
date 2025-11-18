@@ -1,11 +1,28 @@
-// -----------------------------------------------------------------------------
-//  AmpersandPayQuery SDK Utility
-//  -----------------------------------------------------------------------------
-//  Description:
-//  This module provides functionality to query and poll transaction statuses
-//  from the AmpersandPay API. It includes secure signature generation, periodic
-//  status polling, and Firestore integration for automatic status updates.
-// -----------------------------------------------------------------------------
+/*
+============================================================
+File: ampersand_pay_query.dart
+Author: Liew Yee Shian
+Project: Flutter IPG Integration (AmpersandPay)
+Description:
+  This file defines the AmpersandPayQuery class, which provides
+  functionality to query and poll transaction statuses from the
+  AmpersandPay IPG (Internet Payment Gateway) API. It handles
+  secure signature generation, periodic polling, and automatic
+  status updates in Firestore.
+
+Key Responsibilities:
+  • Generate SHA-512 signatures for secure API requests.
+  • Query transaction status from AmpersandPay API.
+  • Poll transaction periodically until confirmed or timeout.
+  • Update Firestore order document when payment is successful.
+
+Usage Notes:
+  - Ensure that `cloud_firestore`, `http`, and `crypto` dependencies
+    are included in pubspec.yaml.
+  - Use `pollTransaction` for automatic polling of transaction status.
+  - Use `queryTransaction` for on-demand transaction status check.
+============================================================
+*/
 
 import 'dart:async';
 import 'dart:convert';
@@ -14,46 +31,39 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Provides methods to query and monitor payment transaction statuses
-/// through the AmpersandPay API.
+/// AmpersandPayQuery handles transaction status queries and polling
+/// for the AmpersandPay IPG API.
 class AmpersandPayQuery {
-  /// Merchant ID issued by AmpersandPay for authentication.
+  /// Merchant ID provided by AmpersandPay
   static const String merchantId = "91012387";
 
-  /// Integration key used to generate request signatures.
+  /// Integration key for generating secure signatures
   static const String integrationKey =
       "8c72119782094d0ea1972f10d597046e934732fb86500e4dad52e068938e5b16";
 
-  /// Endpoint for querying transaction statuses on the AmpersandPay staging environment.
+  /// Staging API endpoint for transaction queries
   static const String queryUrl = "https://stg-ipg.ampersandpay.com/tx/query";
 
-  // ---------------------------------------------------------------------------
-  //  pollTransaction
-  // ---------------------------------------------------------------------------
-  /// Periodically polls the AmpersandPay API to retrieve the status of a given transaction.
+  // ==============================
+  // POLL TRANSACTION STATUS
+  // ==============================
+
+  /// Periodically polls a transaction until its status is confirmed or timeout.
   ///
-  /// Once a transaction is marked as **SUCCESS** or **PAID**, the polling
-  /// process automatically stops and the corresponding order document in
-  /// Firestore is updated.
+  /// Updates the Firestore order document automatically if payment succeeds.
   ///
-  /// **Parameters:**
-  /// - [txId]: The transaction ID to be queried.
-  /// - [orderId]: The Firestore document ID of the order to update.
-  /// - [intervalSeconds]: Interval in seconds between polling attempts (default: 2).
-  /// - [maxAttempts]: Maximum number of polling attempts before timeout (default: 60).
-  ///
-  /// **Behavior:**
-  /// - Delays the first request by one minute to prevent premature querying.
-  /// - Repeats queries at fixed intervals until a final status is received
-  ///   or the maximum attempts limit is reached.
-  /// - Updates Firestore automatically when payment is confirmed.
+  /// Parameters:
+  /// - [txId]: Transaction ID to query.
+  /// - [orderId]: Firestore order document ID.
+  /// - [intervalSeconds]: Seconds between polling attempts (default 2).
+  /// - [maxAttempts]: Maximum polling attempts before timeout (default 60).
   static Future<void> pollTransaction({
     required String txId,
     required String orderId,
     int intervalSeconds = 2,
     int maxAttempts = 60,
   }) async {
-    // Delay initial polling to ensure the transaction is recorded on Ampersand’s server.
+    // Delay first polling attempt to ensure transaction is recorded
     await Future.delayed(const Duration(minutes: 1));
 
     int attempts = 0;
@@ -63,7 +73,7 @@ class AmpersandPayQuery {
     timer = Timer.periodic(Duration(seconds: intervalSeconds), (t) async {
       attempts++;
 
-      // Stop polling after reaching maximum attempts.
+      // Stop polling if max attempts reached
       if (attempts > maxAttempts) {
         t.cancel();
         log("⚠️ Max polling attempts reached for txId: $txId");
@@ -71,15 +81,15 @@ class AmpersandPayQuery {
       }
 
       try {
+        // Query transaction status from API
         final statusData = await queryTransaction(txId);
 
-        // Retry if no valid response is returned.
         if (statusData == null) {
-          log("⚠️ No response from Ampersand, retrying...");
+          log("⚠️ No response for txId $txId, retrying...");
           return;
         }
 
-        // 1201 indicates that the transaction record is not yet available.
+        // 1201 = transaction not yet available
         if (statusData["ret"] == 1201) {
           log("⏳ Transaction $txId not yet available, retrying...");
           return;
@@ -88,7 +98,7 @@ class AmpersandPayQuery {
         final status = statusData["txStatus"]?.toString().toUpperCase() ?? "";
         log("🌐 Polling txId: $txId | Status: $status");
 
-        // Stop polling when payment is confirmed and update Firestore.
+        // Stop polling and update Firestore if payment confirmed
         if (status == "SUCCESS" || status == "PAID") {
           t.cancel();
 
@@ -103,38 +113,34 @@ class AmpersandPayQuery {
           log("✅ Order $orderId marked as PAID.");
         }
       } catch (e) {
-        log("⚠️ Polling error: $e");
+        log("⚠️ Polling error for txId $txId: $e");
       }
     });
   }
 
-  // ---------------------------------------------------------------------------
-  //  queryTransaction
-  // ---------------------------------------------------------------------------
-  /// Queries the AmpersandPay API for the current status of a specific transaction.
+  // ==============================
+  // QUERY TRANSACTION STATUS
+  // ==============================
+
+  /// Queries the AmpersandPay API for a single transaction's status.
   ///
-  /// **Parameters:**
-  /// - [txId]: The transaction ID to be queried.
+  /// Parameters:
+  /// - [txId]: Transaction ID to query.
   ///
-  /// **Returns:**
-  /// - A `Map<String, dynamic>` containing transaction details if successful.
-  /// - `null` if the request fails or response is invalid.
-  ///
-  /// **Behavior:**
-  /// - Constructs a JSON payload containing the merchant ID and transaction ID.
-  /// - Generates a secure SHA-512 signature using the integration key.
-  /// - Sends a POST request to the AmpersandPay query endpoint.
-  /// - Logs and returns the API response for further processing.
+  /// Returns:
+  /// - `Map<String, dynamic>` containing transaction details if successful.
+  /// - `null` if request fails or API returns error.
   static Future<Map<String, dynamic>?> queryTransaction(String txId) async {
     try {
+      // Build JSON request body
       final body = {"merchantId": merchantId, "txId": txId};
       final jsonBody = jsonEncode(body);
 
-      // Generate request signature (SHA-512 hash of JSON body + integration key).
+      // Generate secure SHA-512 signature
       final signature =
           sha512.convert(utf8.encode(jsonBody + integrationKey)).toString();
 
-      // Execute HTTP POST request to query transaction status.
+      // Send POST request to query endpoint
       final response = await http.post(
         Uri.parse(queryUrl),
         headers: {
@@ -145,17 +151,16 @@ class AmpersandPayQuery {
         body: jsonBody,
       );
 
-      // Parse and return valid response.
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        log("✅ Query Response: $data");
+        log("✅ Query Response for $txId: $data");
         return data;
       } else {
         log("❌ HTTP Error ${response.statusCode}: ${response.body}");
         return null;
       }
     } catch (e) {
-      log("⚠️ Exception while querying transaction: $e");
+      log("⚠️ Exception querying txId $txId: $e");
       return null;
     }
   }

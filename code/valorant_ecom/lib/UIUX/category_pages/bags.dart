@@ -1,46 +1,67 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';// For accessing likedProducts global set
-import 'package:valo/UIUX/pages/product.dart'; // Product detail page
-import '../layout/layout.dart'; // Custom layout wrapper for consistent page layout
-import '../../main.dart';
+// ==============================
+// BAGS.DART
+// Flutter E-Commerce Demo: Bags Page
+// ==============================
 
-/// `BagsPage`
-///
-/// A StatefulWidget that displays a grid of bag products from Firestore.
-/// Provides filtering options based on character preferences and bag types,
-/// along with favorite management for logged-in users.
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore database
+import 'package:valo/UIUX/pages/mainpage.dart'; // Access global likedProducts
+import 'package:valo/UIUX/pages/product.dart'; // Product detail page
+import '../layout/layout.dart'; // Custom app layout wrapper
+import '../../main.dart'; // SafeImage widget
+
+// ==============================
+// BAGS PAGE WIDGET
+// ==============================
+
+/// Stateful widget that displays a collection of bag products.
+/// 
+/// Features:
+/// - Firestore-based product loading filtered by category 'bag'
+/// - Favorite management for logged-in users
+/// - Character-based and type-based filtering
+/// - Responsive grid layout with toggleable filter sidebar
+/// - Navigation to ProductPage on product tap
 class BagsPage extends StatefulWidget {
   const BagsPage({super.key});
 
-  /// Static list to store all loaded bag items globally for reuse.
+  /// Global list storing all bag items for reuse across the app
   static List<Map<String, String>> allItems = [];
 
   @override
   State<BagsPage> createState() => _BagsPageState();
 }
 
-/// `_BagsPageState`
-///
-/// Maintains the state of `BagsPage`, including product data, filters,
-/// favorites, and user login status.
+// ==============================
+// BAGS PAGE STATE
+// ==============================
+
+/// Maintains state for BagsPage, including:
+/// - Loaded bag products
+/// - Selected filters (characters & types)
+/// - Logged-in user ID and favorites
+/// - Filter sidebar visibility
 class _BagsPageState extends State<BagsPage> {
-  /// Local copy of all bag items loaded from Firestore.
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
+
+  /// List of all bag products loaded from Firestore
   List<Map<String, String>> _allItems = [];
 
-  /// Current logged-in user ID. Null if no user is logged in.
+  /// Currently logged-in user's ID
   String? userId;
 
-  /// Selected characters for filtering.
+  /// Selected character filters
   Set<String> _selectedCharacters = {};
 
-  /// Selected bag types for filtering.
+  /// Selected bag type filters
   Set<String> _selectedTypes = {};
 
-  /// Controls whether the filter sidebar is shown.
+  /// Controls visibility of the filter sidebar
   bool _showFilters = false;
 
-  /// Supported bag types for filtering.
+  /// Available bag types for filtering
   final List<String> _bagTypes = [
     'Backpack',
     'Totebag',
@@ -48,8 +69,7 @@ class _BagsPageState extends State<BagsPage> {
     'Pouch',
   ];
 
-  /// Character groups used for filter selection.
-  /// Each gender has roles, and each role has a list of characters.
+  /// Character groups organized by gender → role → character
   final Map<String, Map<String, List<String>>> _characterGroups = {
     'Female': {
       'Sentinels': ['Sage', 'Killjoy', 'Deadlock', 'Vyse'],
@@ -65,15 +85,25 @@ class _BagsPageState extends State<BagsPage> {
     },
   };
 
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
+
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check user login and load data
   }
 
-  /// Checks for a logged-in user in Firestore.
-  /// If a user is logged in, their `userId` is stored and
-  /// products and favorites are loaded.
+  // =============================
+  // USER LOGIN & FAVORITE MANAGEMENT
+  // =============================
+
+  /// Checks Firestore to determine if a user is logged in.
+  /// 
+  /// If logged in:
+  /// - Stores `userId`
+  /// - Loads products and favorites
   Future<void> _checkLoginStatus() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
@@ -81,9 +111,7 @@ class _BagsPageState extends State<BagsPage> {
       final loggedInUser = docs.isNotEmpty ? docs.first : null;
 
       if (loggedInUser != null) {
-        setState(() {
-          userId = loggedInUser.id;
-        });
+        setState(() => userId = loggedInUser.id);
         _loadProducts();
         _loadFavorites();
       } else {
@@ -94,8 +122,60 @@ class _BagsPageState extends State<BagsPage> {
     }
   }
 
-  /// Loads all products from Firestore and filters by category "bag".
-  /// Updates both local and global lists for use across the app.
+  /// Loads favorite product IDs for the logged-in user
+  Future<void> _loadFavorites() async {
+    if (userId == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('favorites')
+          .get();
+      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
+    } catch (e) {
+      debugPrint('❌ Error loading favorites: $e');
+    }
+  }
+
+  /// Adds a product to Firestore favorites collection
+  Future<void> _addFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id']!;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .set({
+      ...product,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    setState(() => likedProducts.add(productId));
+  }
+
+  /// Removes a product from Firestore favorites collection
+  Future<void> _removeFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id'];
+    if (productId == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .delete();
+
+    setState(() => likedProducts.remove(productId));
+  }
+
+  // =============================
+  // FIRESTORE PRODUCT LOADING
+  // =============================
+
+  /// Loads bag products from Firestore filtered by category 'bag'
+  /// and updates both local and global lists.
   Future<void> _loadProducts() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('products').get();
@@ -118,7 +198,7 @@ class _BagsPageState extends State<BagsPage> {
 
       setState(() {
         _allItems = items;
-        BagsPage.allItems = _allItems;
+        BagsPage.allItems = _allItems; // Update global reference
       });
 
       debugPrint('✅ Loaded ${items.length} bag items from Firestore');
@@ -127,54 +207,11 @@ class _BagsPageState extends State<BagsPage> {
     }
   }
 
-  /// Loads the favorite products for the logged-in user.
-  Future<void> _loadFavorites() async {
-    if (userId == null) return;
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('favorites')
-          .get();
-      setState(() {
-        likedProducts = snapshot.docs.map((doc) => doc.id).toSet();
-      });
-    } catch (e) {
-      debugPrint('❌ Error loading favorites: $e');
-    }
-  }
+  // =============================
+  // FILTERING LOGIC
+  // =============================
 
-  /// Adds a product to the user's favorites in Firestore.
-  Future<void> _addFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id']!;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .set({
-      ...product,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-    setState(() => likedProducts.add(productId));
-  }
-
-  /// Removes a product from the user's favorites in Firestore.
-  Future<void> _removeFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id'];
-    if (productId == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .delete();
-    setState(() => likedProducts.remove(productId));
-  }
-
-  /// Returns the list of items after applying selected filters.
+  /// Returns a list of products filtered by selected characters and bag types
   List<Map<String, String>> get _filteredItems {
     return _allItems.where((item) {
       final matchesCharacter = _selectedCharacters.isEmpty ||
@@ -198,7 +235,7 @@ class _BagsPageState extends State<BagsPage> {
     }).toList();
   }
 
-  /// Resets all selected filters.
+  /// Clears all selected filters
   void _resetFilters() {
     setState(() {
       _selectedCharacters.clear();
@@ -206,7 +243,7 @@ class _BagsPageState extends State<BagsPage> {
     });
   }
 
-  /// Builds the filter sidebar panel with character and bag type options.
+  /// Builds the filter sidebar panel with character & bag type filters
   Widget _buildFilterPanel() {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 80),
@@ -222,14 +259,18 @@ class _BagsPageState extends State<BagsPage> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(gender,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    gender,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 ...roles.entries.map((roleEntry) {
                   return ExpansionTile(
-                    title: Text(roleEntry.key,
-                        style: const TextStyle(color: Colors.white)),
+                    title: Text(
+                      roleEntry.key,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     children: roleEntry.value
                         .map((char) => CheckboxListTile(
                               value: _selectedCharacters.contains(char),
@@ -255,8 +296,7 @@ class _BagsPageState extends State<BagsPage> {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text("Type",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           ..._bagTypes.map((t) => CheckboxListTile(
                 value: _selectedTypes.contains(t),
@@ -269,6 +309,7 @@ class _BagsPageState extends State<BagsPage> {
                 controlAffinity: ListTileControlAffinity.leading,
               )),
           const SizedBox(height: 10),
+          // Reset filters button
           Center(
             child: ElevatedButton.icon(
               onPressed: _resetFilters,
@@ -287,16 +328,21 @@ class _BagsPageState extends State<BagsPage> {
     );
   }
 
-  /// Main build method for `BagsPage`.
-  /// Builds responsive layout with optional filter sidebar and a product grid.
+  // =============================
+  // WIDGET BUILD
+  // =============================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
+
     final sidebarWidth = isSmallScreen ? screenWidth * 0.5 : 300.0;
     final gridWidth = screenWidth - (_showFilters ? sidebarWidth : 0);
+
     final crossAxisCount = (gridWidth / 160).floor().clamp(1, 4);
     final itemWidth = gridWidth / crossAxisCount - 8;
+
     final filteredItems = _filteredItems;
 
     return Scaffold(
@@ -332,8 +378,9 @@ class _BagsPageState extends State<BagsPage> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) =>
-                                ProductPage(product: Map<String, String>.from(item))),
+                          builder: (_) =>
+                              ProductPage(product: Map<String, String>.from(item)),
+                        ),
                       ),
                       child: Container(
                         padding: const EdgeInsets.all(6),
@@ -370,8 +417,7 @@ class _BagsPageState extends State<BagsPage> {
                               child: Text(
                                 item['desc'] ?? '',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 10),
+                                style: const TextStyle(color: Colors.white70, fontSize: 10),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -392,9 +438,7 @@ class _BagsPageState extends State<BagsPage> {
                                     }
                                   },
                                   child: Icon(
-                                    isLiked
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
+                                    isLiked ? Icons.favorite : Icons.favorite_border,
                                     color: isLiked ? Colors.redAccent : Colors.white,
                                     size: 18,
                                   ),
@@ -412,15 +456,13 @@ class _BagsPageState extends State<BagsPage> {
           ],
         ),
       ),
-      // Floating button to toggle filter sidebar visibility
+      // Floating button to toggle filter sidebar
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.redAccent,
         icon: Icon(_showFilters ? Icons.close : Icons.filter_alt),
         label: Text(_showFilters ? "Hide Filters" : "Show Filters"),
         onPressed: () {
-          setState(() {
-            _showFilters = !_showFilters;
-          });
+          setState(() => _showFilters = !_showFilters);
         },
       ),
     );

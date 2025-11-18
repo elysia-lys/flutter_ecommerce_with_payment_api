@@ -1,23 +1,36 @@
+/// ==============================
+/// FINISH_CHECKOUT_PAGE.DART
+/// Post-Payment Confirmation Screen
+/// ==============================
+library;
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// A post-checkout confirmation screen that displays transaction results,
-/// handles order cleanup, and updates Firestore collections accordingly.
-///
-/// This page is invoked after a payment attempt — whether successful or failed.
-/// It retrieves the related order from Firestore and either removes it (on failure)
-/// or transfers purchased products to the `paidProducts` collection (on success).
+/// ==============================
+/// FINISH CHECKOUT PAGE WIDGET
+/// ==============================
+
+/// Stateful widget for displaying post-payment confirmation.
+/// 
+/// Handles:
+/// - Showing transaction success or failure
+/// - Loading order data from Firestore
+/// - Removing failed orders
+/// - Recording successful orders in `paidProducts`
+/// - Cleaning up user's cart after successful payment
+/// - Navigating back to the home page
 class FinishCheckoutPage extends StatefulWidget {
-  /// Unique Firestore Order ID.
+  /// Unique Firestore Order ID
   final String orderId;
 
-  /// Transaction ID provided by the payment gateway.
+  /// Payment gateway transaction ID
   final String txId;
 
-  /// Indicates whether the transaction was successful.
+  /// Whether the payment was successful
   final bool success;
 
-  /// Firestore user ID of the customer.
+  /// Firestore User ID
   final String userId;
 
   const FinishCheckoutPage({
@@ -32,23 +45,48 @@ class FinishCheckoutPage extends StatefulWidget {
   State<FinishCheckoutPage> createState() => _FinishCheckoutPageState();
 }
 
+/// ==============================
+/// FINISH CHECKOUT PAGE STATE
+/// ==============================
+
+/// Maintains state for [FinishCheckoutPage]
+/// Responsible for:
+/// - Loading order from Firestore
+/// - Handling success/failure logic
+/// - Saving paid products
+/// - Cleaning user's cart
+/// - Displaying transaction details
 class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
-  /// Holds Firestore order data once loaded.
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
+
+  /// Stores order data loaded from Firestore
   Map<String, dynamic>? orderData;
 
-  /// Controls the loading spinner while Firestore data is being fetched.
+  /// Indicates if Firestore data is still being loaded
   bool isLoading = true;
+
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
 
   @override
   void initState() {
     super.initState();
-    _loadOrder(); // Begin fetching order info upon widget initialization.
+    _loadOrder(); // Load order details on widget initialization
   }
 
-  /// 🔹 Loads the corresponding order document from Firestore.
+  // ==============================
+  // FIRESTORE ORDER HANDLING
+  // ==============================
+
+  /// Loads the Firestore order document for the current order.
   ///
-  /// If the order is not found, logs a warning.
-  /// If the transaction failed, the order document is deleted immediately.
+  /// If the order does not exist:
+  /// - Logs a warning
+  /// If the payment failed:
+  /// - Deletes the order from Firestore
   Future<void> _loadOrder() async {
     try {
       final docRef =
@@ -64,28 +102,27 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
       orderData = doc.data();
 
       if (!widget.success) {
-        // ❌ Failed payment: remove the incomplete order from Firestore.
+        // ❌ Remove failed order
         await docRef.delete();
         debugPrint("🗑️ Deleted failed order: ${widget.orderId}");
       }
     } catch (e) {
       debugPrint("❌ Error loading order: $e");
     } finally {
-      // Stop showing the loading spinner regardless of outcome.
-      setState(() => isLoading = false);
+      setState(() => isLoading = false); // Stop loading spinner
     }
   }
 
-  /// 🔹 Saves all purchased products to the `paidProducts` Firestore collection.
+  /// Saves each purchased product to the `paidProducts` Firestore collection.
   ///
-  /// Called only when the user returns home after a successful payment.
-  /// Each product in the order is stored as a separate record, associated with:
-  /// - user ID
-  /// - transaction ID
-  /// - order ID
-  /// - customer details
-  /// - payment method
-  /// - timestamp
+  /// Each product document contains:
+  /// - User ID
+  /// - Order ID
+  /// - Transaction ID
+  /// - Customer info (name, email, contact, address)
+  /// - Payment method
+  /// - Delivery status
+  /// - Timestamp of payment
   Future<void> _savePaidProducts() async {
     if (orderData == null) return;
 
@@ -110,17 +147,15 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
         "deliveryStatus": orderData?['deliveryStatus'] ?? "not_started",
         "paidAt": DateTime.now(),
       });
-
     }
 
-    // ✅ After recording payment, remove purchased items from the user's cart.
+    // ✅ Remove purchased items from user's cart
     await _clearPurchasedItemsFromCart(products);
   }
 
-  /// 🔹 Removes purchased items from the user's Firestore cart collection.
+  /// Removes all purchased items from the user's Firestore cart.
   ///
-  /// This ensures that items that have been successfully purchased no longer
-  /// appear in the cart. It matches products by their document ID.
+  /// Ensures that successfully purchased products no longer appear in the cart.
   Future<void> _clearPurchasedItemsFromCart(
       List<Map<String, dynamic>> purchasedProducts) async {
     final userCartRef = FirebaseFirestore.instance
@@ -148,21 +183,30 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
     }
   }
 
-  /// 🔹 Handles navigation when user taps "Return to Home".
+  // ==============================
+  // NAVIGATION
+  // ==============================
+
+  /// Handles "Return to Home" button tap.
   ///
-  /// If payment succeeded, paid products are saved first.
-  /// Then all navigation routes are popped until the root page.
+  /// If payment was successful:
+  /// - Saves paid products before returning home.
+  /// Navigates back to the root page.
   void _handleHome() async {
     if (widget.success) {
-      await _savePaidProducts(); // Save paid items before returning home.
+      await _savePaidProducts();
     }
     // ignore: use_build_context_synchronously
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  /// 🔹 Converts raw payment channel codes into human-readable labels.
+  // ==============================
+  // PAYMENT METHOD UTILITY
+  // ==============================
+
+  /// Converts payment channel codes to human-readable labels.
   ///
-  /// Example:
+  /// Examples:
   /// - "EW" → "E-Wallet"
   /// - "CC" → "Credit Card"
   /// - "DD" → "Online Banking"
@@ -179,9 +223,12 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
     }
   }
 
+  // ==============================
+  // WIDGET BUILD
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
-    // Define visual indicators depending on transaction result.
     final icon = widget.success ? Icons.check_circle : Icons.error;
     final iconColor = widget.success ? Colors.green : Colors.red;
     final titleText = widget.success ? "Payment Successful!" : "Payment Failed";
@@ -202,7 +249,7 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ✅ Transaction status header
+                        /// ✅ Transaction status header
                         Icon(icon, color: iconColor, size: 80),
                         const SizedBox(height: 8),
                         Text(
@@ -216,7 +263,7 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
 
                         const SizedBox(height: 12),
 
-                        // 🔹 Transaction metadata
+                        /// 🔹 Transaction metadata
                         Text("Transaction ID: ${widget.txId}"),
                         Text("Order ID: ${widget.orderId}"),
                         Text(
@@ -224,7 +271,7 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
                         ),
 
                         if (widget.success) ...[
-                          // ✅ Customer information section
+                          /// ✅ Customer information section
                           const Divider(height: 32),
                           const Text(
                             "User Details",
@@ -236,7 +283,7 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
                           Text("Phone: ${orderData?['custContact'] ?? '-'}"),
                           Text("Address: ${orderData?['address'] ?? '-'}"),
 
-                          // ✅ Order summary section
+                          /// ✅ Order summary section
                           const Divider(height: 32),
                           const Text(
                             "Order Details",
@@ -258,7 +305,7 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // 🔹 Order pricing breakdown
+                          /// 🔹 Order pricing breakdown
                           Text(
                             "Subtotal: RM ${orderData?['txAmount'] != null ? (double.tryParse(orderData!['txAmount'])! - 5).toStringAsFixed(2) : '-'}",
                           ),
@@ -271,7 +318,7 @@ class _FinishCheckoutPageState extends State<FinishCheckoutPage> {
 
                         const SizedBox(height: 24),
 
-                        // 🔹 Navigation button to return home
+                        /// 🔹 Navigation button to return home
                         Center(
                           child: ElevatedButton.icon(
                             icon: const Icon(Icons.home),

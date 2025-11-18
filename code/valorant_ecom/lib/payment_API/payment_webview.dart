@@ -1,4 +1,8 @@
-// ignore_for_file: avoid_print
+/// ==============================
+/// PAYMENT_WEBVIEW.DART
+/// Payment Gateway WebView & Transaction Handling
+/// ==============================
+library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -7,10 +11,29 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:valo/payment_API/finish_checkout.dart';
 import 'package:valo/payment_API/query_transaction.dart';
 
+/// ==============================
+/// PAYMENT WEBVIEW PAGE WIDGET
+/// ==============================
+
+/// Stateful widget for displaying a payment gateway web view.
+///
+/// Responsibilities:
+/// - Load checkout URL for payment
+/// - Monitor transaction status via polling or URL redirects
+/// - Update Firestore order status after payment
+/// - Clear purchased items from the user's cart
+/// - Navigate to `FinishCheckoutPage` after handling payment
 class PaymentWebView extends StatefulWidget {
+  /// Checkout URL from payment gateway
   final String checkoutUrl;
+
+  /// Transaction ID for tracking payment
   final String txId;
+
+  /// Firestore order document ID
   final String orderId;
+
+  /// Firestore user ID
   final String userId;
 
   const PaymentWebView({
@@ -25,18 +48,36 @@ class PaymentWebView extends StatefulWidget {
   State<PaymentWebView> createState() => _PaymentWebViewState();
 }
 
+/// ==============================
+/// PAYMENT WEBVIEW PAGE STATE
+/// ==============================
+
+/// Maintains state for [PaymentWebView]
+/// Handles:
+/// - WebView progress and controller
+/// - Back button handling
+/// - Transaction polling
+/// - Cart cleanup
+/// - Navigation to FinishCheckoutPage
 class _PaymentWebViewState extends State<PaymentWebView> {
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
   InAppWebViewController? webViewController;
-  double progress = 0;
+  double progress = 0; // Page loading progress (0–1)
 
   Timer? pollingTimer;
   int pollAttempts = 0;
   final int maxPollAttempts = 60;
-  bool handledResult = false;
+  bool handledResult = false; // Ensure payment result handled once
 
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
   @override
   void initState() {
     super.initState();
+    // Delay before starting polling to give time for redirect
     Future.delayed(const Duration(minutes: 1), _startPolling);
   }
 
@@ -46,13 +87,18 @@ class _PaymentWebViewState extends State<PaymentWebView> {
     super.dispose();
   }
 
-  // ---------------------------------------------
+  // ==============================
   // BACK BUTTON HANDLING
-  // ---------------------------------------------
+  // ==============================
+
+  /// Handles system back button press
+  /// Shows confirmation dialog and treats as failed payment if confirmed
   Future<bool> _onWillPop() async {
     return await _showCancelConfirmation();
   }
 
+  /// Displays a dialog to confirm payment cancellation
+  /// Updates order as failed if user confirms
   Future<bool> _showCancelConfirmation() async {
     final result = await showDialog<bool>(
       context: context,
@@ -74,13 +120,17 @@ class _PaymentWebViewState extends State<PaymentWebView> {
 
     if (result == true) {
       _handlePaymentResult(false); // treat as failed
-      return false; // prevent pop since we handle navigation inside _handlePaymentResult
+      return false; // prevent automatic pop
     }
-
-    return false; // just stay on the page
+    return false; // stay on page
   }
 
-  // ---------------------------------------------
+  // ==============================
+  // TRANSACTION POLLING
+  // ==============================
+
+  /// Starts polling payment API to check transaction status
+  /// Stops when payment is confirmed or max attempts reached
   void _startPolling() {
     pollingTimer?.cancel();
     pollAttempts = 0;
@@ -115,6 +165,11 @@ class _PaymentWebViewState extends State<PaymentWebView> {
     });
   }
 
+  // ==============================
+  // CART CLEANUP
+  // ==============================
+
+  /// Removes purchased items from user's cart
   Future<void> _clearCart() async {
     final docRef =
         FirebaseFirestore.instance.collection('orders').doc(widget.orderId);
@@ -148,6 +203,12 @@ class _PaymentWebViewState extends State<PaymentWebView> {
     }
   }
 
+  // ==============================
+  // PAYMENT RESULT HANDLING
+  // ==============================
+
+  /// Updates Firestore order status and navigates to FinishCheckoutPage
+  /// Cleans cart if payment was successful
   Future<void> _handlePaymentResult(bool success) async {
     if (handledResult) return;
     handledResult = true;
@@ -182,6 +243,10 @@ class _PaymentWebViewState extends State<PaymentWebView> {
     );
   }
 
+  // ==============================
+  // WIDGET BUILD
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -192,7 +257,7 @@ class _PaymentWebViewState extends State<PaymentWebView> {
           backgroundColor: Colors.black87,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: _showCancelConfirmation, // <-- show confirmation
+            onPressed: _showCancelConfirmation,
           ),
         ),
         body: Stack(
@@ -211,7 +276,6 @@ class _PaymentWebViewState extends State<PaymentWebView> {
               },
               onLoadStop: (controller, url) async {
                 if (url == null || handledResult) return;
-
                 final currentUrl = url.toString();
                 debugPrint("🌐 Redirected to: $currentUrl");
 

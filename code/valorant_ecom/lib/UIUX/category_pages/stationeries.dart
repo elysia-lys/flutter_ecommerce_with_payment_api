@@ -1,48 +1,67 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';
-import 'package:valo/UIUX/pages/product.dart';
-import '../layout/layout.dart';
-import '../../main.dart'; // SafeImage
+// ==============================
+// STATIONERY.DART
+// Flutter E-Commerce Demo: Stationery Page
+// ==============================
 
-/// {@template stationery_page}
-/// A page displaying stationery products retrieved from Firestore.
-///
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore database
+import 'package:valo/UIUX/pages/mainpage.dart'; // Access global likedProducts
+import 'package:valo/UIUX/pages/product.dart'; // Product detail page
+import '../layout/layout.dart'; // Custom layout wrapper
+import '../../main.dart'; // SafeImage widget
+
+// ==============================
+// STATIONERY PAGE WIDGET
+// ==============================
+
+/// Stateful widget that displays a collection of stationery products.
+/// 
 /// Features:
-/// - Character-based and type-based filtering
+/// - Firestore-based product loading filtered by category 'stationery'
 /// - Favorite management for logged-in users
-/// - Responsive grid layout for product display
-/// - Floating action button to toggle filter sidebar
-/// {@endtemplate}
+/// - Character-based and type-based filtering
+/// - Responsive grid layout with toggleable filter sidebar
+/// - Navigation to ProductPage on product tap
 class StationeryPage extends StatefulWidget {
   const StationeryPage({super.key});
 
-  /// Stores all stationery items globally for reuse.
+  /// Global list storing all stationery items for reuse across the app
   static List<Map<String, String>> allItems = [];
 
   @override
   State<StationeryPage> createState() => _StationeryPageState();
 }
 
-/// State for [StationeryPage].
-/// Handles product data loading, filtering, favorites, and user login state.
+// ==============================
+// STATIONERY PAGE STATE
+// ==============================
+
+/// Maintains state for StationeryPage, including:
+/// - Loaded stationery products
+/// - Selected filters (characters & types)
+/// - Logged-in user ID and favorites
+/// - Filter sidebar visibility
 class _StationeryPageState extends State<StationeryPage> {
-  /// All stationery items loaded from Firestore.
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
+
+  /// List of all stationery products loaded from Firestore
   List<Map<String, String>> _allItems = [];
 
-  /// Currently logged-in user's ID.
+  /// Currently logged-in user's ID
   String? userId;
 
-  /// Controls visibility of the filter sidebar.
+  /// Controls visibility of the filter sidebar
   bool _showFilters = false;
 
-  /// Selected characters for filtering.
+  /// Selected character filters
   Set<String> _selectedCharacters = {};
 
-  /// Selected stationery types for filtering.
+  /// Selected stationery type filters
   Set<String> _selectedTypes = {};
 
-  /// Available stationery types for filtering.
+  /// Available stationery types for filtering
   final List<String> _stationeryTypes = [
     'Keychain',
     'Stickers',
@@ -52,7 +71,7 @@ class _StationeryPageState extends State<StationeryPage> {
     'Poster',
   ];
 
-  /// Character groups by gender and role for filtering.
+  /// Character groups organized by gender → role → character
   final Map<String, Map<String, List<String>>> _characterGroups = {
     'Female': {
       'Sentinels': ['Sage', 'Killjoy', 'Deadlock', 'Vyse'],
@@ -68,13 +87,25 @@ class _StationeryPageState extends State<StationeryPage> {
     },
   };
 
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
+
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check user login and load data
   }
 
-  /// Checks if a user is logged in, sets [userId], and loads products and favorites.
+  // =============================
+  // USER LOGIN & FAVORITE MANAGEMENT
+  // =============================
+
+  /// Checks Firestore to determine if a user is logged in.
+  /// 
+  /// If logged in:
+  /// - Stores `userId`
+  /// - Loads products and favorites
   Future<void> _checkLoginStatus() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
@@ -93,7 +124,60 @@ class _StationeryPageState extends State<StationeryPage> {
     }
   }
 
-  /// Loads stationery products from Firestore and filters by category.
+  /// Loads favorite product IDs for the logged-in user
+  Future<void> _loadFavorites() async {
+    if (userId == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('favorites')
+          .get();
+      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
+    } catch (e) {
+      debugPrint('❌ Error loading favorites: $e');
+    }
+  }
+
+  /// Adds a product to Firestore favorites collection
+  Future<void> _addFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id']!;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .set({
+      ...product,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    setState(() => likedProducts.add(productId));
+  }
+
+  /// Removes a product from Firestore favorites collection
+  Future<void> _removeFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id'];
+    if (productId == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .delete();
+
+    setState(() => likedProducts.remove(productId));
+  }
+
+  // =============================
+  // FIRESTORE PRODUCT LOADING
+  // =============================
+
+  /// Loads stationery products from Firestore filtered by category 'stationery'
+  /// and updates both local and global lists.
   Future<void> _loadProducts() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('products').get();
@@ -116,7 +200,7 @@ class _StationeryPageState extends State<StationeryPage> {
 
       setState(() {
         _allItems = items;
-        StationeryPage.allItems = _allItems;
+        StationeryPage.allItems = _allItems; // Update global reference
       });
 
       debugPrint('✅ Loaded ${items.length} stationery items from Firestore');
@@ -125,59 +209,16 @@ class _StationeryPageState extends State<StationeryPage> {
     }
   }
 
-  /// Loads the user's favorite products from Firestore.
-  Future<void> _loadFavorites() async {
-    if (userId == null) return;
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('favorites')
-          .get();
-      setState(() {
-        likedProducts = snapshot.docs.map((doc) => doc.id).toSet();
-      });
-    } catch (e) {
-      debugPrint('❌ Error loading favorites: $e');
-    }
-  }
+  // =============================
+  // FILTERING LOGIC
+  // =============================
 
-  /// Adds a product to the user's favorites in Firestore.
-  Future<void> _addFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id']!;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .set({
-      ...product,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-    setState(() => likedProducts.add(productId));
-  }
-
-  /// Removes a product from the user's favorites in Firestore.
-  Future<void> _removeFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id'];
-    if (productId == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .delete();
-    setState(() => likedProducts.remove(productId));
-  }
-
-  /// Returns the filtered list of items based on selected characters and types.
+  /// Returns a list of products filtered by selected characters and stationery types
   List<Map<String, String>> get _filteredItems {
     return _allItems.where((item) {
       final matchesCharacter = _selectedCharacters.isEmpty ||
-          _selectedCharacters.any(
-              (c) => item['name']?.toLowerCase().contains(c.toLowerCase()) ?? false);
+          _selectedCharacters.any((c) =>
+              item['name']?.toLowerCase().contains(c.toLowerCase()) ?? false);
 
       final matchesType = _selectedTypes.isEmpty ||
           _selectedTypes.any((t) {
@@ -190,7 +231,7 @@ class _StationeryPageState extends State<StationeryPage> {
     }).toList();
   }
 
-  /// Resets all selected filters.
+  /// Clears all selected filters
   void _resetFilters() {
     setState(() {
       _selectedCharacters.clear();
@@ -198,13 +239,14 @@ class _StationeryPageState extends State<StationeryPage> {
     });
   }
 
-  /// Builds the filter sidebar UI with character groups and stationery types.
+  /// Builds the filter sidebar panel with character & stationery type filters
   Widget _buildFilterPanel() {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Character filters by gender and role
           ..._characterGroups.entries.map((genderEntry) {
             final gender = genderEntry.key;
             final roles = genderEntry.value;
@@ -213,14 +255,18 @@ class _StationeryPageState extends State<StationeryPage> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(gender,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    gender,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 ...roles.entries.map((roleEntry) {
                   return ExpansionTile(
-                    title: Text(roleEntry.key,
-                        style: const TextStyle(color: Colors.white)),
+                    title: Text(
+                      roleEntry.key,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     children: roleEntry.value
                         .map((char) => CheckboxListTile(
                               value: _selectedCharacters.contains(char),
@@ -231,8 +277,8 @@ class _StationeryPageState extends State<StationeryPage> {
                                       : _selectedCharacters.remove(char);
                                 });
                               },
-                              title: Text(char,
-                                  style: const TextStyle(color: Colors.white)),
+                              title:
+                                  Text(char, style: const TextStyle(color: Colors.white)),
                               controlAffinity: ListTileControlAffinity.leading,
                             ))
                         .toList(),
@@ -242,11 +288,11 @@ class _StationeryPageState extends State<StationeryPage> {
               ],
             );
           }),
+          // Stationery type filters
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text("Type",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           ..._stationeryTypes.map((t) => CheckboxListTile(
                 value: _selectedTypes.contains(t),
@@ -259,15 +305,17 @@ class _StationeryPageState extends State<StationeryPage> {
                 controlAffinity: ListTileControlAffinity.leading,
               )),
           const SizedBox(height: 10),
+          // Reset filters button
           Center(
             child: ElevatedButton.icon(
               onPressed: _resetFilters,
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text("Reset Filters"),
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
+                backgroundColor: Colors.redAccent,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
             ),
           ),
           const SizedBox(height: 30),
@@ -276,14 +324,21 @@ class _StationeryPageState extends State<StationeryPage> {
     );
   }
 
+  // =============================
+  // WIDGET BUILD
+  // =============================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
+
     final sidebarWidth = isSmallScreen ? screenWidth * 0.5 : 300.0;
     final gridWidth = screenWidth - (_showFilters ? sidebarWidth : 0);
+
     final crossAxisCount = (gridWidth / 160).floor().clamp(1, 4);
     final itemWidth = gridWidth / crossAxisCount - 8;
+
     final filteredItems = _filteredItems;
 
     return Scaffold(
@@ -292,6 +347,7 @@ class _StationeryPageState extends State<StationeryPage> {
         appBarActions: const [],
         body: Row(
           children: [
+            // Filter sidebar
             if (_showFilters)
               Container(
                 width: sidebarWidth,
@@ -299,6 +355,7 @@ class _StationeryPageState extends State<StationeryPage> {
                 color: Colors.black12,
                 child: _buildFilterPanel(),
               ),
+            // Product grid
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(6.0),
@@ -317,8 +374,9 @@ class _StationeryPageState extends State<StationeryPage> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) =>
-                                ProductPage(product: Map<String, String>.from(item))),
+                          builder: (_) =>
+                              ProductPage(product: Map<String, String>.from(item)),
+                        ),
                       ),
                       child: Container(
                         padding: const EdgeInsets.all(6),
@@ -330,12 +388,14 @@ class _StationeryPageState extends State<StationeryPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            // Product image
                             SafeImage(
                               item['image'] ?? 'assets/image_not_found.png',
                               width: itemWidth / 2,
                               height: 80,
                             ),
                             const SizedBox(height: 6),
+                            // Product name
                             Flexible(
                               child: Text(
                                 item['name'] ?? '',
@@ -348,16 +408,17 @@ class _StationeryPageState extends State<StationeryPage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            // Product description
                             Flexible(
                               child: Text(
                                 item['desc'] ?? '',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 10),
+                                style: const TextStyle(color: Colors.white70, fontSize: 10),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            // Price and favorite button
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -373,9 +434,7 @@ class _StationeryPageState extends State<StationeryPage> {
                                     }
                                   },
                                   child: Icon(
-                                    isLiked
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
+                                    isLiked ? Icons.favorite : Icons.favorite_border,
                                     color: isLiked ? Colors.redAccent : Colors.white,
                                     size: 18,
                                   ),
@@ -393,6 +452,7 @@ class _StationeryPageState extends State<StationeryPage> {
           ],
         ),
       ),
+      // Floating button to toggle filter sidebar
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.redAccent,
         icon: Icon(_showFilters ? Icons.close : Icons.filter_alt),

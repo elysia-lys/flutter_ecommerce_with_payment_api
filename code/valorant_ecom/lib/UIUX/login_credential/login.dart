@@ -1,15 +1,25 @@
+// ==============================
+// LOGIN.DART
+// User Authentication Page for E-Commerce App
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';
+import 'package:valo/UIUX/pages/mainpage.dart'; // Redirect after successful login
+import 'signup.dart'; // Navigate to sign-up page
 
-import 'signup.dart';
+// ==============================
+// LOGIN PAGE WIDGET
+// ==============================
 
 /// 🔐 **LoginPage**
-/// 
-/// This widget provides a secure login interface for users. It handles user
-/// authentication by verifying credentials stored in Firebase Firestore and
-/// managing session persistence using `SharedPreferences`.
+///
+/// Provides a secure login interface for users. Handles:
+/// - User input for full name, email, and password
+/// - Authentication against Firebase Firestore
+/// - Session persistence via SharedPreferences
+/// - Navigation to the [MainPage] on successful login
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -17,40 +27,50 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
+// ==============================
+// LOGIN PAGE STATE
+// ==============================
+
 /// 🔒 **_LoginPageState**
-/// 
-/// Manages the state and behavior of the `LoginPage`, including:
-/// - Reading user input (name, email, password)
-/// - Validating credentials against Firestore
-/// - Updating user login status
-/// - Storing session information locally
+///
+/// Manages UI and business logic for the login process:
+/// - Reads and validates user input
+/// - Checks credentials against Firestore
+/// - Updates login status in Firestore
+/// - Stores session information locally
+/// - Handles navigation and error messages
 class _LoginPageState extends State<LoginPage> {
-  /// Firestore instance used for reading/writing user data.
+  /// Firestore instance for reading/writing user data
   final _firestore = FirebaseFirestore.instance;
 
-  /// Controllers for text fields.
+  /// Controllers for input fields
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  /// Indicates if the login process is currently ongoing.
+  /// Indicates whether a login process is ongoing
   bool _loading = false;
 
-  /// ✅ **Performs user login**
+  // ==============================
+  // LOGIN METHOD
+  // ==============================
+
+  /// ✅ Performs user login
   ///
-  /// This method:
-  /// 1. Validates the input fields.
-  /// 2. Retrieves the user document from Firestore.
-  /// 3. Compares entered password with the stored password.
-  /// 4. Updates the `loggedIn` field in Firestore.
-  /// 5. Saves login session locally using `SharedPreferences`.
-  /// 6. Redirects to the `MainPage` upon success.
+  /// Steps:
+  /// 1. Validate input fields (full name, email, password)
+  /// 2. Construct a unique Firestore document ID
+  /// 3. Retrieve the user document from `users` collection
+  /// 4. Compare input password with stored password
+  /// 5. Update `loggedIn` field in Firestore
+  /// 6. Store user session in `SharedPreferences`
+  /// 7. Navigate to [MainPage] if login is successful
   Future<void> _login() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // 🔸 Basic input validation
+    // 🔹 Basic input validation
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill in all fields")),
@@ -61,7 +81,8 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _loading = true);
 
     try {
-      final userId = "${name}_$email"; // Construct a unique user identifier
+      // Construct a unique user ID from name + email
+      final userId = "${name}_$email";
       final docRef = _firestore.collection('users').doc(userId);
       final docSnap = await docRef.get();
 
@@ -69,15 +90,16 @@ class _LoginPageState extends State<LoginPage> {
         final data = docSnap.data()!;
         final storedPassword = data['password'];
 
-        // ✅ Validate password
+        // ✅ Password validation
         if (storedPassword == password) {
-          await docRef.update({'loggedIn': true}); // Update login flag in Firestore
+          // Mark user as logged in in Firestore
+          await docRef.update({'loggedIn': true});
 
-          // ✅ Store login info locally
+          // ✅ Store session locally
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('loggedInUser', userId);
 
-          // ✅ Navigate to MainPage
+          // ✅ Show success message and navigate to main page
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("Login successful!")),
@@ -88,19 +110,21 @@ class _LoginPageState extends State<LoginPage> {
             );
           }
         } else {
+          // 🔹 Wrong password
           // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Incorrect password")),
           );
         }
       } else {
+        // 🔹 User not found
         // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("No account found")),
         );
       }
     } catch (e) {
-      // ⚠️ Handle login or network errors
+      // ⚠️ Handle errors (network issues, Firestore errors)
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
@@ -110,10 +134,17 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// 🧱 **Builds the login page UI**
+  // ==============================
+  // BUILD METHOD
+  // ==============================
+
+  /// 🧱 Builds the LoginPage UI
   ///
-  /// Displays input fields for full name, email, and password along with
-  /// a login button and navigation to the sign-up page.
+  /// Includes:
+  /// - App logo and welcome text
+  /// - Input fields for full name, email, and password
+  /// - Login button with loading indicator
+  /// - Navigation link to Sign-Up page
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -197,7 +228,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 25),
 
-              // 🔹 Login Button (shows loader while processing)
+              // 🔹 Login Button / Loader
               _loading
                   ? const CircularProgressIndicator(color: Colors.redAccent)
                   : SizedBox(
@@ -214,7 +245,9 @@ class _LoginPageState extends State<LoginPage> {
                         child: const Text(
                           "Login",
                           style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -240,4 +273,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-

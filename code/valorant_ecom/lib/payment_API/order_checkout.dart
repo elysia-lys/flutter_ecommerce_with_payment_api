@@ -1,13 +1,40 @@
+/// ==============================
+/// ORDER_CHECKOUT.DART
+/// Checkout Form & Payment Processing
+/// ==============================
+library;
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'call_api.dart';
 import 'payment_webview.dart';
-import '../main.dart'; // Import SafeImage for displaying product images
+import '../main.dart'; // For SafeImage widget
 
+/// ==============================
+/// ORDER CHECKOUT WIDGET
+/// ==============================
+
+/// Stateful widget for handling order checkout.
+/// 
+/// Responsibilities:
+/// - Display form for user info (name, address, email, phone)
+/// - Display cart summary with items, subtotal, and total
+/// - Allow selection of payment method
+/// - Validate form inputs
+/// - Save order to Firestore
+/// - Initiate payment via API
+/// - Redirect to payment webview
 class OrderCheckout extends StatefulWidget {
+  /// Firestore order ID
   final String orderId;
+
+  /// List of items in the cart
   final List<Map<String, dynamic>> cartItems;
+
+  /// Subtotal of all cart items
   final double subtotal;
+
+  /// Firestore user ID
   final String userId;
 
   const OrderCheckout({
@@ -22,18 +49,41 @@ class OrderCheckout extends StatefulWidget {
   State<OrderCheckout> createState() => _OrderCheckoutState();
 }
 
+/// ==============================
+/// ORDER CHECKOUT STATE
+/// ==============================
+
+/// Handles:
+/// - Form validation
+/// - Payment initiation
+/// - Cart & order processing
+/// - UI rendering
 class _OrderCheckoutState extends State<OrderCheckout> {
+  // -----------------------------
+  // FORM CONTROLLERS
+  // -----------------------------
   final _formKey = GlobalKey<FormState>();
   final nameController = TextEditingController();
   final addressController = TextEditingController();
   final emailController = TextEditingController();
   final numberController = TextEditingController();
+
+  /// Selected payment method from dropdown
   String? selectedPayment;
 
+  /// Supported payment methods
   final paymentMethods = ["Online Banking", "Credit Card", "E-Wallet"];
 
-  double get totalPay => widget.subtotal + 0.0;
+  // -----------------------------
+  // COMPUTED VALUES
+  // -----------------------------
+  /// Total payable amount (subtotal + delivery fee)
+  double get totalPay => widget.subtotal + 0.0; // delivery currently 0
 
+  // -----------------------------
+  // PAYMENT UTILITY
+  // -----------------------------
+  /// Converts payment method name to internal code
   String getChannelCode(String method) {
     switch (method) {
       case "Online Banking":
@@ -47,6 +97,10 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     }
   }
 
+  // -----------------------------
+  // PAYMENT HANDLER
+  // -----------------------------
+  /// Validates inputs, saves order, and initiates payment
   Future<void> _handlePay() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -64,6 +118,9 @@ class _OrderCheckoutState extends State<OrderCheckout> {
 
       final txChannel = getChannelCode(selectedPayment!);
 
+      // -----------------------------
+      // PREPARE ORDER DATA FOR FIRESTORE
+      // -----------------------------
       final orderData = {
         "merchantId": "91012387",
         "txType": "SALE",
@@ -90,11 +147,15 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         "createdAt": DateTime.now(),
       };
 
+      // Save order in Firestore
       await FirebaseFirestore.instance
           .collection('orders')
           .doc(widget.orderId)
           .set(orderData);
 
+      // -----------------------------
+      // INITIATE PAYMENT VIA API
+      // -----------------------------
       final response = await CallApi.processPayment(
         totalAmount: totalPay,
         paymentMethod: selectedPayment!,
@@ -113,6 +174,7 @@ class _OrderCheckoutState extends State<OrderCheckout> {
         final checkoutUrl = response["checkoutUrl"];
         final txId = response["txId"] ?? "TX_UNKNOWN";
 
+        // Navigate to PaymentWebView
         // ignore: use_build_context_synchronously
         Navigator.pushReplacement(
           context,
@@ -143,6 +205,10 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     }
   }
 
+  // -----------------------------
+  // FORM VALIDATION
+  // -----------------------------
+  /// Validates each form field based on label
   String? _validateField(String label, String? value) {
     if (value == null || value.trim().isEmpty) {
       return "Please enter your $label";
@@ -187,6 +253,10 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     return null;
   }
 
+  // -----------------------------
+  // WIDGET BUILDERS
+  // -----------------------------
+  /// Builds a labeled text field with validation
   Widget _buildTextField(String label, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -208,6 +278,7 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     );
   }
 
+  /// Builds a cart summary list with items, subtotal, and total
   Widget _buildCartSummary() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,6 +330,9 @@ class _OrderCheckoutState extends State<OrderCheckout> {
     );
   }
 
+  // ==============================
+  // WIDGET BUILD
+  // ==============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -274,16 +348,21 @@ class _OrderCheckoutState extends State<OrderCheckout> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              /// 🔹 Order metadata
               Text(
                 "Order ID: ${widget.orderId}",
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
               const SizedBox(height: 10),
+
+              /// 🔹 User info fields
               _buildTextField("Full Name", nameController),
               _buildTextField("Address", addressController),
               _buildTextField("Email", emailController),
               _buildTextField("Phone Number", numberController),
               const SizedBox(height: 16),
+
+              /// 🔹 Payment method dropdown
               DropdownButtonFormField<String>(
                 value: selectedPayment,
                 decoration: const InputDecoration(
@@ -303,8 +382,12 @@ class _OrderCheckoutState extends State<OrderCheckout> {
                 onChanged: (v) => setState(() => selectedPayment = v),
               ),
               const SizedBox(height: 20),
+
+              /// 🔹 Cart summary
               _buildCartSummary(),
               const SizedBox(height: 30),
+
+              /// 🔹 Action buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [

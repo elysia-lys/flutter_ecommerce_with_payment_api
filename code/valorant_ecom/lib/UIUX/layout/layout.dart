@@ -1,3 +1,8 @@
+// ==============================
+// LAYOUT.DART
+// Main Layout & TopBar for E-Commerce App
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:valo/UIUX/pages/mainpage.dart';
@@ -14,7 +19,16 @@ import '../category_pages/toys_figurines.dart';
 import '../pages/transaction_history/history.dart';
 import '../login_credential/login.dart';
 
-/// Product model for Firestore product entries
+/// ==============================
+/// PRODUCT MODEL
+/// ==============================
+
+/// Represents a single product stored in Firestore
+///
+/// Includes all product attributes required for display and filtering:
+/// - `name`, `desc`, `price` for general info
+/// - `category`, `type`, `size`, `color`, `measurement` for filtering
+/// - `image` for UI display
 class Product {
   final String name;
   final String desc;
@@ -38,6 +52,7 @@ class Product {
     required this.image,
   });
 
+  /// Factory constructor to create Product from Firestore document data
   factory Product.fromFirestore(Map<String, dynamic> data) {
     return Product(
       name: data['name'] ?? '',
@@ -53,7 +68,16 @@ class Product {
   }
 }
 
-/// Layout wrapper with TopBar
+/// ==============================
+/// APP LAYOUT WIDGET
+/// ==============================
+
+/// Wraps pages with a consistent layout including `TopBar`
+///
+/// Parameters:
+/// - `body`: The main content of the page
+/// - `title`: Page title (currently not displayed, reserved for future use)
+/// - `appBarActions`: List of action buttons (currently unused, placeholder for future)
 class AppLayout extends StatelessWidget {
   final Widget body;
   final String title;
@@ -72,15 +96,23 @@ class AppLayout extends StatelessWidget {
       backgroundColor: Colors.black,
       body: Column(
         children: [
-          const TopBar(),
-          Expanded(child: body),
+          const TopBar(),       // Always show top navigation/search bar
+          Expanded(child: body), // Main content area
         ],
       ),
     );
   }
 }
 
-/// TopBar with search, cart, and menu
+/// ==============================
+/// TOPBAR WIDGET
+/// ==============================
+
+/// Top navigation bar with:
+/// - App logo (navigates to MainPage)
+/// - Search bar with debounce filter for products
+/// - Cart icon with reactive badge
+/// - Menu button for navigation
 class TopBar extends StatefulWidget {
   const TopBar({super.key});
 
@@ -89,20 +121,18 @@ class TopBar extends StatefulWidget {
 }
 
 class _TopBarState extends State<TopBar> {
-  final TextEditingController _controller = TextEditingController();
-  List<Product> allProducts = [];
-  List<Product> filteredProducts = [];
-  bool isLoading = true;
-  bool isSearching = false;
-  DateTime? _lastSearch;
+  final TextEditingController _controller = TextEditingController(); // Search input
+  List<Product> allProducts = [];    // All products loaded from Firestore
+  List<Product> filteredProducts = []; // Filtered search results
+  bool isLoading = true;             // Loading state during Firestore fetch
+  bool isSearching = false;          // Indicates debounce search
+  DateTime? _lastSearch;             // For debounce logic
 
   @override
   void initState() {
     super.initState();
-    _loadProductsFromFirestore();
-
-    // Listen to global cart notifier
-    cartCountNotifier.addListener(_onCartCountChanged);
+    _loadProductsFromFirestore();    // Load all products initially
+    cartCountNotifier.addListener(_onCartCountChanged); // Listen to cart updates
   }
 
   @override
@@ -111,11 +141,12 @@ class _TopBarState extends State<TopBar> {
     super.dispose();
   }
 
+  /// Callback when cart count changes
   void _onCartCountChanged() {
-    setState(() {}); // Update badge when cart changes
+    setState(() {}); // Rebuild to update badge
   }
 
-  /// Load all products from Firestore
+  /// Fetch all products from Firestore
   Future<void> _loadProductsFromFirestore() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('products').get();
@@ -131,7 +162,7 @@ class _TopBarState extends State<TopBar> {
     }
   }
 
-  /// Filter products based on search text (300ms debounce)
+  /// Filter products by search query with 300ms debounce
   void _filterProducts(String query) {
     final now = DateTime.now();
     _lastSearch = now;
@@ -154,7 +185,7 @@ class _TopBarState extends State<TopBar> {
     });
   }
 
-  /// Cart icon with reactive badge
+  /// Build cart icon with reactive badge
   Widget _buildCartIcon() {
     return Stack(
       clipBehavior: Clip.none,
@@ -192,15 +223,18 @@ class _TopBarState extends State<TopBar> {
     );
   }
 
+  /// Build TopBar UI
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Main top bar container
         Container(
           padding: const EdgeInsets.fromLTRB(12, 25, 12, 10),
           color: Colors.black,
           child: Row(
             children: [
+              // Logo navigation
               GestureDetector(
                 onTap: () {
                   Navigator.pushAndRemoveUntil(
@@ -215,6 +249,7 @@ class _TopBarState extends State<TopBar> {
                   height: 55,
                 ),
               ),
+              // Search bar
               Expanded(
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 14),
@@ -245,14 +280,15 @@ class _TopBarState extends State<TopBar> {
                   ),
                 ),
               ),
-
+              // Cart icon
               _buildCartIcon(),
+              // Menu button
               const MenuButton(),
             ],
           ),
         ),
 
-        // Search results dropdown
+        // Search dropdown results
         if (_controller.text.isNotEmpty)
           Container(
             color: Colors.black,
@@ -268,7 +304,6 @@ class _TopBarState extends State<TopBar> {
                             itemBuilder: (context, index) {
                               final product = filteredProducts[index];
                               final imagePath = product.image.trim();
-
                               return ListTile(
                                 leading: SafeImage(
                                   imagePath.isNotEmpty
@@ -306,10 +341,16 @@ class _TopBarState extends State<TopBar> {
   }
 }
 
-/// Menu button with navigation
+/// ==============================
+/// MENU BUTTON
+/// ==============================
+
+/// Opens a side menu with navigation:
+/// - Home, Categories, My Favourite, Purchase History, Logout
 class MenuButton extends StatelessWidget {
   const MenuButton({super.key});
 
+  /// Open main menu dialog
   void _openMenu(BuildContext context) {
     showGeneralDialog(
       context: context,
@@ -390,6 +431,7 @@ class MenuButton extends StatelessWidget {
     );
   }
 
+  /// Helper to build individual menu items
   static ListTile _menuItem(BuildContext context, IconData icon, String title, Widget page) {
     return ListTile(
       leading: Icon(icon, color: Colors.white),
@@ -398,6 +440,7 @@ class MenuButton extends StatelessWidget {
     );
   }
 
+  /// Open category submenu
   void _openCategoriesMenu(BuildContext context) {
     showGeneralDialog(
       context: context,
@@ -459,7 +502,11 @@ class MenuButton extends StatelessWidget {
   }
 }
 
-/// Category list item
+/// ==============================
+/// CATEGORY ITEM WIDGET
+/// ==============================
+
+/// Represents a single item in the categories menu
 class _CategoryItem extends StatelessWidget {
   final IconData icon;
   final String title;

@@ -1,11 +1,22 @@
+// ==============================
+// EDIT CART ITEM PAGE
+// Allows editing of a cart item
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/main.dart'; // SafeImage
+import 'package:valo/main.dart'; // SafeImage widget for displaying product images
 
+/// EditCartItemPage allows the user to modify a cart item's:
+/// - Quantity
+/// - Color
+/// - Size
+/// - Measurement
+/// It also allows the user to save changes or delete the item entirely from the cart.
 class EditCartItemPage extends StatefulWidget {
-  final String userId;
-  final String cartDocId;
-  final Map<String, dynamic> item;
+  final String userId; // Firestore user document ID
+  final String cartDocId; // Firestore cart document ID for the item
+  final Map<String, dynamic> item; // Cart item data passed from CartPage
 
   const EditCartItemPage({
     super.key,
@@ -19,29 +30,34 @@ class EditCartItemPage extends StatefulWidget {
 }
 
 class _EditCartItemPageState extends State<EditCartItemPage> {
-  late int quantity;
-  String? selectedColor;
-  String? selectedSize;
-  String? selectedMeasurement;
+  // Editable fields
+  late int quantity; // Current quantity of the item
+  String? selectedColor; // Selected color option
+  String? selectedSize; // Selected size option
+  String? selectedMeasurement; // Selected measurement option
 
+  // Available product options loaded from Firestore
   List<String> colors = [];
   List<String> sizes = [];
   List<String> measurements = [];
 
-  bool isLoading = true;
+  bool isLoading = true; // Tracks loading state for fetching product options
 
   @override
   void initState() {
     super.initState();
-    // Initialize from cart item
+    // Initialize state from the cart item passed
     quantity = widget.item['quantity'] ?? 1;
     selectedColor = widget.item['color']?.isNotEmpty == true ? widget.item['color'] : null;
     selectedSize = widget.item['size']?.isNotEmpty == true ? widget.item['size'] : null;
     selectedMeasurement = widget.item['measurement']?.isNotEmpty == true ? widget.item['measurement'] : null;
 
+    // Load product options from Firestore for dropdowns
     _loadProductOptions();
   }
 
+  /// Loads available product options (color, size, measurement) from 'products' collection.
+  /// Ensures the currently selected options are valid; otherwise, resets them.
   Future<void> _loadProductOptions() async {
     try {
       final querySnapshot = await FirebaseFirestore.instance
@@ -62,6 +78,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
         sizes = _parseOptions(data['size']);
         measurements = _parseOptions(data['measurement']);
 
+        // Reset selections if they are no longer available
         if (!colors.contains(selectedColor)) selectedColor = null;
         if (!sizes.contains(selectedSize)) selectedSize = null;
         if (!measurements.contains(selectedMeasurement)) selectedMeasurement = null;
@@ -74,11 +91,14 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
     }
   }
 
+  /// Parses comma-separated strings into a list of trimmed option values.
   List<String> _parseOptions(dynamic raw) {
     if (raw == null || raw.toString().trim().isEmpty) return [];
     return raw.toString().split(',').map((e) => e.trim()).toList();
   }
 
+  /// Generates a unique cart document ID based on item name and selected options.
+  /// This ensures cart items with different options are treated as separate entries.
   String _generateCartId() {
     final name = widget.item['name'] ?? '';
     final colorPart = selectedColor ?? '';
@@ -87,8 +107,10 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
     return '${name}_${colorPart}${sizePart}${measurementPart}';
   }
 
+  /// Saves the changes made to the cart item in Firestore.
+  /// Handles quantity limits, merging items if the cart ID changes due to option changes.
   Future<void> saveChanges() async {
-    // Max quantity check
+    // Max quantity validation
     if (quantity > 100) {
       await showDialog(
         context: context,
@@ -103,7 +125,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
           ],
         ),
       );
-      return; // stop saving until quantity <= 100
+      return; // Stop saving until quantity <= 100
     }
 
     final newCartId = _generateCartId();
@@ -114,9 +136,11 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
 
     try {
       if (widget.cartDocId != newCartId) {
+        // Check if a cart item with the new options already exists
         final existing = await userCartRef.doc(newCartId).get();
 
         if (existing.exists) {
+          // Merge quantities and delete old document
           final existingQty = existing.data()?['quantity'] ?? 0;
           await userCartRef.doc(newCartId).update({
             'quantity': existingQty + quantity,
@@ -124,6 +148,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
           });
           await userCartRef.doc(widget.cartDocId).delete();
         } else {
+          // Create new cart document with new options and delete old one
           await userCartRef.doc(newCartId).set({
             'name': widget.item['name'],
             'price': widget.item['price'],
@@ -138,6 +163,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
           await userCartRef.doc(widget.cartDocId).delete();
         }
       } else {
+        // Update existing cart document if ID didn't change
         await userCartRef.doc(widget.cartDocId).update({
           'quantity': quantity,
           'color': selectedColor ?? '',
@@ -147,6 +173,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
         });
       }
 
+      // Close page and notify CartPage of update
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       print('Error saving cart changes: $e');
@@ -158,6 +185,8 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
     }
   }
 
+  /// Builds a styled dropdown menu for selecting product options.
+  /// Returns an empty widget if no options are available.
   Widget _buildDropdown(String label, List<String> options, String? value, Function(String?) onChanged) {
     if (options.isEmpty) return const SizedBox.shrink();
 
@@ -201,6 +230,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Product image
                   Center(
                     child: SafeImage(
                       item['image'],
@@ -210,17 +240,19 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // Product name and price
                   Text(item['name'], style: const TextStyle(fontSize: 22, color: Colors.white)),
                   const SizedBox(height: 10),
                   Text("RM ${item['price']}", style: const TextStyle(fontSize: 18, color: Colors.redAccent)),
                   const SizedBox(height: 20),
 
-                  // Dropdowns
+                  // Option dropdowns: Color, Size, Measurement
                   _buildDropdown("Color", colors, selectedColor, (v) => setState(() => selectedColor = v)),
                   _buildDropdown("Size", sizes, selectedSize, (v) => setState(() => selectedSize = v)),
                   _buildDropdown("Measurement", measurements, selectedMeasurement, (v) => setState(() => selectedMeasurement = v)),
 
-                  // Quantity (editable)
+                  // Quantity field
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -250,7 +282,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
                     ],
                   ),
 
-                  // Save Button
+                  // Save changes button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -261,7 +293,7 @@ class _EditCartItemPageState extends State<EditCartItemPage> {
                   ),
                   const SizedBox(height: 10),
 
-                  // Delete Button
+                  // Delete item button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

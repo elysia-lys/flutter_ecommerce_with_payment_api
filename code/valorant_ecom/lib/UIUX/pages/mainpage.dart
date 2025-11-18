@@ -1,16 +1,36 @@
+// ==============================
+// MAINPAGE.DART
+// Flutter Main Page for E-Commerce Demo
+// ==============================
+
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:carousel_slider/carousel_slider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:valo/UIUX/layout/layout.dart';
-import 'package:valo/UIUX/login_credential/login.dart';
-import 'package:valo/main.dart';
-import 'product.dart';
+import 'package:carousel_slider/carousel_slider.dart'; // For carousel banner
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore database
+import 'package:url_launcher/url_launcher.dart'; // To open external links
+import 'package:valo/UIUX/layout/layout.dart'; // Shared layout for consistent app UI
+import 'package:valo/UIUX/login_credential/login.dart'; // Login page
+import 'package:valo/main.dart'; // For SafeImage
+import 'product.dart'; // Product page
 
-/// A global set containing IDs of products that the user has liked.
+// ==============================
+// GLOBAL VARIABLES
+// ==============================
+
+/// A set containing IDs of products that the user has liked.
 Set<String> likedProducts = {};
 
+// ==============================
+// MAIN PAGE WIDGET
+// ==============================
+
+/// MainPage represents the dashboard after login.
+///
+/// Displays:
+/// - Banner section with clickable promotions
+/// - Top Picks section (products)
+/// - Handles favorites (like/unlike)
+/// - Checks user login status and loads data from Firestore
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -19,21 +39,41 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  /// Currently logged-in user ID
   String? userId;
+
+  /// All loaded products from Firestore
   List<Map<String, String>> products = [];
+
+  /// Top Picks products to show on dashboard
   List<Map<String, String>> topPicks = [];
+
+  /// Loading indicators
   bool isLoadingProducts = true;
   bool isCheckingLogin = true;
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check if user is logged in on init
   }
 
+  // ==============================
+  // LOGIN STATUS
+  // ==============================
+
+  /// Checks whether a user is logged in by querying Firestore.
+  ///
+  /// - If a logged-in user is found:
+  ///   - Sets userId
+  ///   - Loads products and favorites
+  /// - Otherwise, navigates to LoginPage
   Future<void> _checkLoginStatus() async {
     try {
+      // Get all users from Firestore
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
+
+      // Filter logged-in user
       final docs = snapshot.docs.where((doc) => doc.data()['loggedIn'] == true);
       final loggedInUser = docs.isNotEmpty ? docs.first : null;
 
@@ -42,9 +82,12 @@ class _MainPageState extends State<MainPage> {
           userId = loggedInUser.id;
           isCheckingLogin = false;
         });
+
+        // Load products and user's favorites
         await _loadProducts();
         await _loadFavorites();
       } else {
+        // No logged-in user → redirect to login
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -63,6 +106,11 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  // ==============================
+  // LOAD PRODUCTS
+  // ==============================
+
+  /// Loads products from Firestore and prepares Top Picks.
   Future<void> _loadProducts() async {
     try {
       final snapshot =
@@ -86,8 +134,11 @@ class _MainPageState extends State<MainPage> {
 
       setState(() {
         products = loaded;
+
+        // Prepare Top Picks by shuffling and limiting to 20
         topPicks = List<Map<String, String>>.from(loaded)..shuffle();
         if (topPicks.length > 20) topPicks = topPicks.sublist(0, 20);
+
         isLoadingProducts = false;
       });
     } catch (e) {
@@ -96,6 +147,11 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  // ==============================
+  // FAVORITES (LIKED PRODUCTS)
+  // ==============================
+
+  /// Loads user's favorite products from Firestore
   Future<void> _loadFavorites() async {
     if (userId == null) return;
     try {
@@ -113,6 +169,7 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  /// Add product to favorites
   Future<void> _addFavorite(Map<String, String> product) async {
     if (userId == null) return;
     final productId = product['id'] ?? DateTime.now().toString();
@@ -125,44 +182,48 @@ class _MainPageState extends State<MainPage> {
       ...product,
       'timestamp': FieldValue.serverTimestamp(),
     });
+
     setState(() => likedProducts.add(productId));
   }
 
+  /// Remove product from favorites
   Future<void> _removeFavorite(Map<String, String> product) async {
     if (userId == null) return;
     final productId = product['id'];
     if (productId == null) return;
+
     await FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
         .collection('favorites')
         .doc(productId)
         .delete();
+
     setState(() => likedProducts.remove(productId));
   }
 
-  /// Handle Android back button → ONLY show exit dialog at root
+  // ==============================
+  // BACK BUTTON HANDLING
+  // ==============================
+
+  /// Handles Android back button.
+  ///
+  /// - If not at root → default back navigation
+  /// - If at root → show exit confirmation dialog
   Future<bool> _onWillPop() async {
-    // If there are pages to pop (not root), allow normal back
     if (Navigator.of(context).canPop()) {
-      return true;
+      return true; // Not root, allow back
     }
 
-    // If at root → show exit confirmation
+    // Root → show exit confirmation
     final shouldExit = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Exit App"),
         content: const Text("Are you sure you want to exit the app?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("No"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("Yes"),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("No")),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text("Yes")),
         ],
       ),
     );
@@ -170,27 +231,30 @@ class _MainPageState extends State<MainPage> {
     return shouldExit ?? false;
   }
 
+  // ==============================
+  // BUILD WIDGET
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
+    // Show loader while checking login
     if (isCheckingLogin) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(color: Colors.redAccent),
-        ),
+        body: Center(child: CircularProgressIndicator(color: Colors.redAccent)),
       );
     }
 
     return WillPopScope(
       onWillPop: _onWillPop,
       child: AppLayout(
-        title: '',
-        appBarActions: [],
+        title: '', // No title in AppBar
+        appBarActions: [], // Can add actions here
         body: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const BannerSection(),
+              const BannerSection(), // Carousel banners
               if (isLoadingProducts)
                 const Center(
                   child: Padding(
@@ -208,10 +272,7 @@ class _MainPageState extends State<MainPage> {
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(30.0),
-                    child: Text(
-                      "No products found.",
-                      style: TextStyle(color: Colors.white),
-                    ),
+                    child: Text("No products found.", style: TextStyle(color: Colors.white)),
                   ),
                 ),
             ],
@@ -222,12 +283,15 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-/// ---------------------------
-/// BANNER SECTION
-/// ---------------------------
+// ==============================
+// BANNER SECTION
+// ==============================
+
+/// Carousel banners at top of main page
 class BannerSection extends StatelessWidget {
   const BannerSection({super.key});
 
+  /// Launch external URL
   Future<void> _launchURL(String url) async {
     final Uri uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -235,6 +299,7 @@ class BannerSection extends StatelessWidget {
     }
   }
 
+  /// Banner card widget
   Widget _bannerCard(String imagePath, String url) {
     return GestureDetector(
       onTap: () => _launchURL(url),
@@ -270,9 +335,11 @@ class BannerSection extends StatelessWidget {
   }
 }
 
-/// ---------------------------
-/// TOP PICKS SECTION
-/// ---------------------------
+// ==============================
+// TOP PICKS SECTION
+// ==============================
+
+/// Displays the Top Picks products with pagination and favorites
 class TopPicksSection extends StatefulWidget {
   final List<Map<String, String>> products;
   final Future<void> Function(Map<String, String>) addFavorite;
@@ -290,10 +357,13 @@ class TopPicksSection extends StatefulWidget {
 }
 
 class _TopPicksSectionState extends State<TopPicksSection> {
+  /// Current page in pagination
   int _currentPage = 0;
 
+  /// Calculate number of items per row based on screen width
   int itemsPerRow(double width) => (width ~/ 160).clamp(1, 5);
 
+  /// Total pages based on items per page
   int get totalPages {
     final screenWidth = MediaQuery.of(context).size.width;
     final perRow = itemsPerRow(screenWidth);
@@ -301,6 +371,7 @@ class _TopPicksSectionState extends State<TopPicksSection> {
     return (widget.products.length / itemsPerPage).ceil();
   }
 
+  /// Get visible products for current page
   List<Map<String, String>> visibleProducts(double width) {
     final perRow = itemsPerRow(width);
     final itemsPerPage = perRow * 3;
@@ -309,8 +380,10 @@ class _TopPicksSectionState extends State<TopPicksSection> {
     return widget.products.sublist(startIndex, endIndex);
   }
 
+  /// Go to specific page in pagination
   void goToPage(int page) => setState(() => _currentPage = page);
 
+  /// Individual product card
   Widget _productCard(Map<String, String> product) {
     final isLiked = likedProducts.contains(product["id"]);
 
@@ -386,6 +459,10 @@ class _TopPicksSectionState extends State<TopPicksSection> {
       ),
     );
   }
+
+  // ==============================
+  // BUILD TOP PICKS
+  // ==============================
 
   @override
   Widget build(BuildContext context) {

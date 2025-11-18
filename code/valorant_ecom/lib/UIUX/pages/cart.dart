@@ -1,16 +1,24 @@
+// ==============================
+// CART PAGE
+// Displays the user's cart
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:valo/UIUX/pages/edit_cart_item.dart';
 import 'package:valo/payment_API/order_checkout.dart';
-import '../../main.dart'; // SafeImage widget
-import '../layout/layout.dart'; // Shared layout
-import '../login_credential/login.dart'; // Login redirect
+import '../../main.dart'; // SafeImage widget for image rendering
+import '../layout/layout.dart'; // Shared AppLayout for consistent app design
+import '../login_credential/login.dart'; // LoginPage redirect if user is not logged in
 
-/// Global cart count notifier to sync badge
+/// Global cart count notifier
+/// This ValueNotifier allows the cart badge to be updated across the app
+/// whenever the cart's content changes.
 final ValueNotifier<int> cartCountNotifier = ValueNotifier<int>(0);
 
-/// CartPage displays the user's shopping cart, allows managing items,
-/// and provides checkout functionality.
+/// CartPage widget
+/// Displays the user's shopping cart, allows editing quantity, deleting items,
+/// selecting items, selecting all, and proceeding to checkout.
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
 
@@ -19,16 +27,19 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
-  String? userId;
-  bool selectAll = true;
-  bool isLoading = true;
+  String? userId; // Currently logged-in user's document ID
+  bool selectAll = true; // Tracks the state of "Select All" checkbox
+  bool isLoading = true; // Tracks if data is being loaded from Firestore
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check if user is logged in and fetch cart count
   }
 
+  /// Checks if a user is logged in by querying Firestore 'users' collection.
+  /// If logged in, sets [userId] and updates the cart badge.
+  /// If not logged in, redirects to the LoginPage.
   Future<void> _checkLoginStatus() async {
     try {
       final snapshot =
@@ -38,7 +49,7 @@ class _CartPageState extends State<CartPage> {
 
       if (loggedInUser != null) {
         userId = loggedInUser.id;
-        await _updateCartCount();
+        await _updateCartCount(); // Update badge count on login
       } else {
         if (mounted) {
           Navigator.pushReplacement(
@@ -54,7 +65,8 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// Updates the global cart badge
+  /// Updates the global cart badge by fetching the user's cart items
+  /// from Firestore and setting the [cartCountNotifier] value.
   Future<void> _updateCartCount() async {
     if (userId == null) return;
     final cartSnapshot = await FirebaseFirestore.instance
@@ -66,6 +78,8 @@ class _CartPageState extends State<CartPage> {
     if (mounted) setState(() => isLoading = false);
   }
 
+  /// Toggles the selection state of a single cart item.
+  /// Updates the 'selected' field in Firestore.
   Future<void> toggleItemSelection(String productId, bool value) async {
     if (userId == null) return;
     await FirebaseFirestore.instance
@@ -76,6 +90,8 @@ class _CartPageState extends State<CartPage> {
         .update({'selected': value});
   }
 
+  /// Toggles the selection state of all items in the cart.
+  /// Uses Firestore batch update for efficiency.
   Future<void> toggleSelectAll(bool value) async {
     if (userId == null) return;
     final cartRef = FirebaseFirestore.instance
@@ -90,7 +106,8 @@ class _CartPageState extends State<CartPage> {
     await batch.commit();
   }
 
-  /// Delete an item and update badge immediately
+  /// Deletes a single cart item from Firestore.
+  /// Updates the global cart badge immediately after deletion.
   Future<void> deleteItem(String productId) async {
     if (userId == null) return;
     final cartRef = FirebaseFirestore.instance
@@ -100,11 +117,13 @@ class _CartPageState extends State<CartPage> {
 
     await cartRef.doc(productId).delete();
 
-    // Immediately update the badge, including when last item is deleted
+    // Update cart badge after deletion
     final snapshot = await cartRef.get();
     cartCountNotifier.value = snapshot.docs.length;
   }
 
+  /// Updates the quantity of a cart item.
+  /// If the new quantity is <= 0, the item is deleted.
   Future<void> updateQuantity(String productId, int newQty) async {
     if (userId == null) return;
     if (newQty > 0) {
@@ -119,12 +138,14 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
+  /// Computes the total price of selected cart items.
   double computeTotal(List<Map<String, dynamic>> items) {
     return items
         .where((item) => item['selected'] == true)
         .fold(0.0, (sum, item) => sum + (item['price'] * item['quantity']));
   }
 
+  /// Generates a new order document in Firestore and returns the orderId.
   Future<String> _generateOrderId(String userId,
       List<Map<String, dynamic>> selectedItems, double totalPrice) async {
     final orderId = "order${DateTime.now().millisecondsSinceEpoch}";
@@ -145,6 +166,7 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Show loading spinner while checking login or fetching data
     if (isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -153,6 +175,7 @@ class _CartPageState extends State<CartPage> {
       );
     }
 
+    // If user is not logged in, show redirect message
     if (userId == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -163,6 +186,7 @@ class _CartPageState extends State<CartPage> {
       );
     }
 
+    // Reference to user's cart collection in Firestore
     final cartRef = FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
@@ -179,14 +203,17 @@ class _CartPageState extends State<CartPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // Map Firestore documents to list of cart item maps
           final cartItems = snapshot.data!.docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             return {'id': doc.id, ...data};
           }).toList();
 
+          // Determine if "Select All" checkbox should be checked
           selectAll = cartItems.isNotEmpty &&
               cartItems.every((i) => i['selected'] == true);
 
+          // Show empty cart message if no items
           if (cartItems.isEmpty) {
             cartCountNotifier.value = 0; // clear badge when empty
             return const Center(
@@ -195,19 +222,21 @@ class _CartPageState extends State<CartPage> {
             );
           }
 
+          // Filter selected items for checkout
           final selectedItems =
               cartItems.where((i) => i['selected'] == true).toList();
           final totalPrice = computeTotal(cartItems);
 
           return Column(
             children: [
+              // Cart item list
               Expanded(
                 child: ListView.builder(
                   itemCount: cartItems.length,
                   itemBuilder: (context, index) {
                     final item = cartItems[index];
 
-                    /// Build details string: color / size / measurement
+                    // Build optional details string: color / size / measurement
                     final detailsList = [
                       if ((item['color'] ?? '').isNotEmpty) item['color'],
                       if ((item['size'] ?? '').isNotEmpty) item['size'],
@@ -218,7 +247,7 @@ class _CartPageState extends State<CartPage> {
 
                     return GestureDetector(
                       onTap: () async {
-                        /// Open EditCartItemPage
+                        // Open EditCartItemPage to edit quantity or options
                         final updated = await Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -231,8 +260,8 @@ class _CartPageState extends State<CartPage> {
                         );
 
                         if (updated == true && mounted) {
-                          setState(() {});
-                          _updateCartCount();
+                          setState(() {}); // Refresh UI
+                          _updateCartCount(); // Update badge
                         }
                       },
 
@@ -245,12 +274,14 @@ class _CartPageState extends State<CartPage> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Checkbox for selecting item
                               Checkbox(
                                 value: item['selected'] ?? true,
                                 onChanged: (v) => toggleItemSelection(
                                     item['id'], v ?? false),
                                 activeColor: Colors.redAccent,
                               ),
+                              // Product image
                               SafeImage(item['image'] ?? '',
                                   width: 50, height: 50, fit: BoxFit.cover),
                               const SizedBox(width: 10),
@@ -258,9 +289,11 @@ class _CartPageState extends State<CartPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    // Product name
                                     Text(item['name'] ?? '',
                                         style: const TextStyle(
                                             color: Colors.white)),
+                                    // Product details (color/size/measurement)
                                     if (details.isNotEmpty)
                                       Padding(
                                         padding:
@@ -273,9 +306,11 @@ class _CartPageState extends State<CartPage> {
                                         ),
                                       ),
                                     const SizedBox(height: 5),
+                                    // Price x Quantity
                                     Text("\$${item['price']} x ${item['quantity']}",
                                         style: const TextStyle(
                                             color: Colors.white70)),
+                                    // Quantity increment/decrement buttons
                                     Row(
                                       children: [
                                         IconButton(
@@ -301,6 +336,7 @@ class _CartPageState extends State<CartPage> {
                                   ],
                                 ),
                               ),
+                              // Delete button
                               IconButton(
                                 icon:
                                     const Icon(Icons.delete, color: Colors.redAccent),
@@ -315,7 +351,7 @@ class _CartPageState extends State<CartPage> {
                 ),
               ),
 
-              // Bottom Summary + Checkout button
+              // Bottom summary & checkout section
               Padding(
                 padding: const EdgeInsets.only(bottom: 20),
                 child: Container(
@@ -334,6 +370,7 @@ class _CartPageState extends State<CartPage> {
                   ),
                   child: Row(
                     children: [
+                      // Select All checkbox
                       Checkbox(
                         value: selectAll,
                         onChanged: (v) => toggleSelectAll(v ?? false),
@@ -342,12 +379,14 @@ class _CartPageState extends State<CartPage> {
                       const Text("Select All",
                           style: TextStyle(color: Colors.white)),
                       const Spacer(),
+                      // Total price display
                       Text(
                         "Total: \$${totalPrice.toStringAsFixed(2)}",
                         style: const TextStyle(
                             color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(width: 12),
+                      // Checkout button
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: selectedItems.isNotEmpty
@@ -358,9 +397,11 @@ class _CartPageState extends State<CartPage> {
                         ),
                         onPressed: selectedItems.isNotEmpty
                             ? () async {
+                                // Generate order in Firestore
                                 final orderId = await _generateOrderId(
                                     userId!, selectedItems, totalPrice);
 
+                                // Navigate to OrderCheckout page
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(

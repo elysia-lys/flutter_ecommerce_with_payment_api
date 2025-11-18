@@ -1,46 +1,67 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';// For accessing likedProducts global set
-import 'package:valo/UIUX/pages/product.dart';// Product detail page
-import '../layout/layout.dart'; // Custom layout wrapper for consistent page layout
-import '../../main.dart';
+// ==============================
+// CLOTHING.DART
+// Flutter E-Commerce Demo: Clothing Page
+// ==============================
 
-/// `ClothingPage`
-///
-/// A StatefulWidget that displays a grid of clothing products from Firestore.
-/// Provides filtering options based on character preferences and clothing types,
-/// along with favorite management for logged-in users.
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore database
+import 'package:valo/UIUX/pages/mainpage.dart'; // Access global likedProducts
+import 'package:valo/UIUX/pages/product.dart'; // Product detail page
+import '../layout/layout.dart'; // Custom app layout wrapper
+import '../../main.dart'; // SafeImage widget
+
+// ==============================
+// CLOTHING PAGE WIDGET
+// ==============================
+
+/// Stateful widget that displays a collection of clothing products.
+/// 
+/// Features:
+/// - Firestore-based product loading filtered by category 'clothing'
+/// - Favorite management for logged-in users
+/// - Character-based and type-based filtering
+/// - Responsive grid layout with toggleable filter sidebar
+/// - Navigation to ProductPage on product tap
 class ClothingPage extends StatefulWidget {
   const ClothingPage({super.key});
 
-  /// Static list to store all loaded clothing items globally for reuse.
+  /// Global list storing all clothing items for reuse across the app
   static List<Map<String, String>> allItems = [];
 
   @override
   State<ClothingPage> createState() => _ClothingPageState();
 }
 
-/// `_ClothingPageState`
-///
-/// Maintains the state of `ClothingPage`, including product data, filters,
-/// favorites, and user login status.
+// ==============================
+// CLOTHING PAGE STATE
+// ==============================
+
+/// Maintains state for ClothingPage, including:
+/// - Loaded clothing products
+/// - Selected filters (characters & types)
+/// - Logged-in user ID and favorites
+/// - Filter sidebar visibility
 class _ClothingPageState extends State<ClothingPage> {
-  /// Local copy of all clothing items loaded from Firestore.
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
+
+  /// List of all clothing products loaded from Firestore
   List<Map<String, String>> _allItems = [];
 
-  /// Current logged-in user ID. Null if no user is logged in.
+  /// Currently logged-in user's ID
   String? userId;
 
-  /// Selected characters for filtering.
+  /// Selected character filters
   Set<String> _selectedCharacters = {};
 
-  /// Selected clothing types for filtering.
+  /// Selected clothing type filters
   Set<String> _selectedTypes = {};
 
-  /// Controls whether the filter sidebar is shown.
+  /// Controls visibility of the filter sidebar
   bool _showFilters = false;
 
-  /// Supported clothing types for filtering.
+  /// Available clothing types for filtering
   final List<String> _clothingTypes = [
     'Shirt',
     'Long Sleeve',
@@ -53,8 +74,7 @@ class _ClothingPageState extends State<ClothingPage> {
     'Cap',
   ];
 
-  /// Character groups used for filter selection.
-  /// Each gender has roles, and each role has a list of characters.
+  /// Character groups organized by gender → role → character
   final Map<String, Map<String, List<String>>> _characterGroups = {
     'Female': {
       'Sentinels': ['Sage', 'Killjoy', 'Deadlock', 'Vyse'],
@@ -70,15 +90,25 @@ class _ClothingPageState extends State<ClothingPage> {
     },
   };
 
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
+
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check user login and load data
   }
 
-  /// Checks for a logged-in user in Firestore.
-  /// If a user is logged in, their `userId` is stored and
-  /// products and favorites are loaded.
+  // =============================
+  // USER LOGIN & FAVORITE MANAGEMENT
+  // =============================
+
+  /// Checks Firestore to determine if a user is logged in.
+  /// 
+  /// If logged in:
+  /// - Stores `userId`
+  /// - Loads products and favorites
   Future<void> _checkLoginStatus() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
@@ -86,9 +116,7 @@ class _ClothingPageState extends State<ClothingPage> {
       final loggedInUser = docs.isNotEmpty ? docs.first : null;
 
       if (loggedInUser != null) {
-        setState(() {
-          userId = loggedInUser.id;
-        });
+        setState(() => userId = loggedInUser.id);
         _loadProducts();
         _loadFavorites();
       } else {
@@ -99,8 +127,60 @@ class _ClothingPageState extends State<ClothingPage> {
     }
   }
 
-  /// Loads all products from Firestore and filters by category "clothing".
-  /// Updates both local and global lists for use across the app.
+  /// Loads favorite product IDs for the logged-in user
+  Future<void> _loadFavorites() async {
+    if (userId == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('favorites')
+          .get();
+      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
+    } catch (e) {
+      debugPrint('❌ Error loading favorites: $e');
+    }
+  }
+
+  /// Adds a product to Firestore favorites collection
+  Future<void> _addFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id']!;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .set({
+      ...product,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    setState(() => likedProducts.add(productId));
+  }
+
+  /// Removes a product from Firestore favorites collection
+  Future<void> _removeFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id'];
+    if (productId == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .delete();
+
+    setState(() => likedProducts.remove(productId));
+  }
+
+  // =============================
+  // FIRESTORE PRODUCT LOADING
+  // =============================
+
+  /// Loads clothing products from Firestore filtered by category 'clothing'
+  /// and updates both local and global lists.
   Future<void> _loadProducts() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('products').get();
@@ -123,64 +203,20 @@ class _ClothingPageState extends State<ClothingPage> {
 
       setState(() {
         _allItems = items;
-        ClothingPage.allItems = _allItems;
+        ClothingPage.allItems = _allItems; // Update global reference
       });
 
       debugPrint('✅ Loaded ${items.length} clothing items from Firestore');
     } catch (e) {
-      debugPrint('❌ Error loading clothing items: $e');
+      debugPrint('❌ Error loading clothing: $e');
     }
   }
 
-  /// Loads the favorite products for the logged-in user.
-  Future<void> _loadFavorites() async {
-    if (userId == null) return;
+  // =============================
+  // FILTERING LOGIC
+  // =============================
 
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('favorites')
-          .get();
-      setState(() {
-        likedProducts = snapshot.docs.map((doc) => doc.id).toSet();
-      });
-    } catch (e) {
-      debugPrint('❌ Error loading favorites: $e');
-    }
-  }
-
-  /// Adds a product to the user's favorites in Firestore.
-  Future<void> _addFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id']!;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .set({
-      ...product,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-    setState(() => likedProducts.add(productId));
-  }
-
-  /// Removes a product from the user's favorites in Firestore.
-  Future<void> _removeFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id'];
-    if (productId == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .delete();
-    setState(() => likedProducts.remove(productId));
-  }
-
-  /// Returns the list of items after applying selected filters.
+  /// Returns a list of products filtered by selected characters and clothing types
   List<Map<String, String>> get _filteredItems {
     return _allItems.where((item) {
       final matchesCharacter = _selectedCharacters.isEmpty ||
@@ -198,7 +234,7 @@ class _ClothingPageState extends State<ClothingPage> {
     }).toList();
   }
 
-  /// Resets all selected filters.
+  /// Clears all selected filters
   void _resetFilters() {
     setState(() {
       _selectedCharacters.clear();
@@ -206,7 +242,7 @@ class _ClothingPageState extends State<ClothingPage> {
     });
   }
 
-  /// Builds the filter sidebar panel with character and clothing type options.
+  /// Builds the filter sidebar panel with character & clothing type filters
   Widget _buildFilterPanel() {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 80),
@@ -222,14 +258,18 @@ class _ClothingPageState extends State<ClothingPage> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(gender,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    gender,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 ...roles.entries.map((roleEntry) {
                   return ExpansionTile(
-                    title: Text(roleEntry.key,
-                        style: const TextStyle(color: Colors.white)),
+                    title: Text(
+                      roleEntry.key,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     children: roleEntry.value
                         .map((char) => CheckboxListTile(
                               value: _selectedCharacters.contains(char),
@@ -240,8 +280,8 @@ class _ClothingPageState extends State<ClothingPage> {
                                       : _selectedCharacters.remove(char);
                                 });
                               },
-                              title: Text(char,
-                                  style: const TextStyle(color: Colors.white)),
+                              title:
+                                  Text(char, style: const TextStyle(color: Colors.white)),
                               controlAffinity: ListTileControlAffinity.leading,
                             ))
                         .toList(),
@@ -255,8 +295,7 @@ class _ClothingPageState extends State<ClothingPage> {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text("Type",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           ..._clothingTypes.map((t) => CheckboxListTile(
                 value: _selectedTypes.contains(t),
@@ -269,6 +308,7 @@ class _ClothingPageState extends State<ClothingPage> {
                 controlAffinity: ListTileControlAffinity.leading,
               )),
           const SizedBox(height: 10),
+          // Reset filters button
           Center(
             child: ElevatedButton.icon(
               onPressed: _resetFilters,
@@ -287,16 +327,21 @@ class _ClothingPageState extends State<ClothingPage> {
     );
   }
 
-  /// Main build method for `ClothingPage`.
-  /// Builds responsive layout with optional filter sidebar and a product grid.
+  // =============================
+  // WIDGET BUILD
+  // =============================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
+
     final sidebarWidth = isSmallScreen ? screenWidth * 0.5 : 300.0;
     final gridWidth = screenWidth - (_showFilters ? sidebarWidth : 0);
+
     final crossAxisCount = (gridWidth / 160).floor().clamp(1, 4);
     final itemWidth = gridWidth / crossAxisCount - 8;
+
     final filteredItems = _filteredItems;
 
     return Scaffold(
@@ -332,9 +377,8 @@ class _ClothingPageState extends State<ClothingPage> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ProductPage(
-                            product: Map<String, String>.from(item),
-                          ),
+                          builder: (_) =>
+                              ProductPage(product: Map<String, String>.from(item)),
                         ),
                       ),
                       child: Container(
@@ -342,8 +386,7 @@ class _ClothingPageState extends State<ClothingPage> {
                         decoration: BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(10),
-                          border:
-                              Border.all(color: Colors.redAccent, width: 1.5),
+                          border: Border.all(color: Colors.redAccent, width: 1.5),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
@@ -373,8 +416,7 @@ class _ClothingPageState extends State<ClothingPage> {
                               child: Text(
                                 item['desc'] ?? '',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 10),
+                                style: const TextStyle(color: Colors.white70, fontSize: 10),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -395,11 +437,8 @@ class _ClothingPageState extends State<ClothingPage> {
                                     }
                                   },
                                   child: Icon(
-                                    isLiked
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    color:
-                                        isLiked ? Colors.redAccent : Colors.white,
+                                    isLiked ? Icons.favorite : Icons.favorite_border,
+                                    color: isLiked ? Colors.redAccent : Colors.white,
                                     size: 18,
                                   ),
                                 ),
@@ -416,15 +455,13 @@ class _ClothingPageState extends State<ClothingPage> {
           ],
         ),
       ),
-      // Floating button to toggle filter sidebar visibility
+      // Floating button to toggle filter sidebar
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.redAccent,
         icon: Icon(_showFilters ? Icons.close : Icons.filter_alt),
         label: Text(_showFilters ? "Hide Filters" : "Show Filters"),
         onPressed: () {
-          setState(() {
-            _showFilters = !_showFilters;
-          });
+          setState(() => _showFilters = !_showFilters);
         },
       ),
     );

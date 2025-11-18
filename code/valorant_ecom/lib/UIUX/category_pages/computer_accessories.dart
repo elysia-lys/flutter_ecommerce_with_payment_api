@@ -1,57 +1,73 @@
+// ==============================
+// COMPUTER_ACCESSORY.DART
+// Flutter E-Commerce Demo: Computer Accessories Page
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';// Global set for liked products
-import 'package:valo/UIUX/pages/product.dart';// Product detail page
-import '../layout/layout.dart'; // Custom layout wrapper
-import '../../main.dart';
+import 'package:valo/UIUX/pages/mainpage.dart'; // Access global likedProducts
+import 'package:valo/UIUX/pages/product.dart'; // Product detail page
+import '../layout/layout.dart'; // Custom app layout wrapper
+import '../../main.dart'; // SafeImage widget
 
-/// {@template computer_accessory_page}
-/// A page displaying a grid of computer accessory products from Firestore.
-/// Supports character-based and type-based filtering,
-/// and favorite management for logged-in users.
-/// {@endtemplate}
+// ==============================
+// COMPUTER ACCESSORY PAGE WIDGET
+// ==============================
+
+/// Stateful widget that displays computer accessory products
+/// 
+/// Features:
+/// - Firestore-based product loading filtered by category 'computer_accessory'
+/// - Favorite management for logged-in users
+/// - Character-based and type-based filtering
+/// - Responsive grid layout with toggleable filter sidebar
+/// - Navigation to ProductPage on product tap
 class ComputerAccessoryPage extends StatefulWidget {
   const ComputerAccessoryPage({super.key});
 
-  /// Stores all computer accessory items globally for reuse.
+  /// Global list storing all computer accessory items for reuse across the app
   static List<Map<String, String>> allItems = [];
 
   @override
   State<ComputerAccessoryPage> createState() => _ComputerAccessoryPageState();
 }
 
-/// State for [ComputerAccessoryPage].
-/// Manages product data, filters, favorites, and user login status.
+// ==============================
+// COMPUTER ACCESSORY PAGE STATE
+// ==============================
+
+/// Maintains state for ComputerAccessoryPage, including:
+/// - Loaded products
+/// - Selected filters (characters & accessory types)
+/// - Logged-in user ID and favorites
+/// - Filter sidebar visibility
 class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
-  /// Local list of computer accessory items.
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
+
+  /// List of all products loaded from Firestore
   List<Map<String, String>> _allItems = [];
 
-  /// Logged-in user ID, null if no user is logged in.
+  /// Currently logged-in user's ID
   String? userId;
 
-  /// Selected characters for filtering.
+  /// Selected character filters
   Set<String> _selectedCharacters = {};
 
-  /// Selected accessory types for filtering.
+  /// Selected accessory type filters
   Set<String> _selectedTypes = {};
 
-  /// Controls visibility of filter sidebar.
+  /// Controls visibility of the filter sidebar
   bool _showFilters = false;
 
-  /// Available accessory types for filtering.
+  /// Available accessory types for filtering
   final List<String> _accessoryTypes = [
-    'Keycaps',
-    'Keyboard',
-    'Laptop',
-    'Mouse',
-    'Head phones',
-    'Ear phones',
-    'Phone',
-    'Monitor',
-    'CPU',
+    'Keycaps', 'Keyboard', 'Laptop', 'Mouse', 'Head phones',
+    'Ear phones', 'Phone', 'Monitor', 'CPU',
   ];
 
-  /// Character groups categorized by gender and role.
+  /// Character groups organized by gender → role → character
   final Map<String, Map<String, List<String>>> _characterGroups = {
     'Female': {
       'Sentinels': ['Sage', 'Killjoy', 'Deadlock', 'Vyse'],
@@ -67,13 +83,24 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
     },
   };
 
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
+
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check user login and load data
   }
 
-  /// Checks if a user is logged in and loads their favorites and products.
+  // =============================
+  // USER LOGIN & FAVORITE MANAGEMENT
+  // =============================
+
+  /// Checks Firestore to determine if a user is logged in.
+  /// If logged in:
+  /// - Stores `userId`
+  /// - Loads products and favorites
   Future<void> _checkLoginStatus() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
@@ -92,7 +119,56 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
     }
   }
 
-  /// Loads all computer accessory products from Firestore and filters by category.
+  /// Loads favorite product IDs for the logged-in user
+  Future<void> _loadFavorites() async {
+    if (userId == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('favorites')
+          .get();
+      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
+    } catch (e) {
+      debugPrint('❌ Error loading favorites: $e');
+    }
+  }
+
+  /// Adds a product to Firestore favorites collection
+  Future<void> _addFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id']!;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .set({
+      ...product,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    setState(() => likedProducts.add(productId));
+  }
+
+  /// Removes a product from Firestore favorites collection
+  Future<void> _removeFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id'];
+    if (productId == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .delete();
+    setState(() => likedProducts.remove(productId));
+  }
+
+  // =============================
+  // FIRESTORE PRODUCT LOADING
+  // =============================
+
+  /// Loads computer accessory products from Firestore filtered by category 'computer_accessory'
   Future<void> _loadProducts() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('products').get();
@@ -117,62 +193,22 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
         ComputerAccessoryPage.allItems = _allItems;
       });
 
-      debugPrint('✅ Loaded ${items.length} computer accessories from Firestore');
+      debugPrint('✅ Loaded ${items.length} computer accessory items from Firestore');
     } catch (e) {
       debugPrint('❌ Error loading computer accessories: $e');
     }
   }
 
-  /// Loads favorite products for the current user.
-  Future<void> _loadFavorites() async {
-    if (userId == null) return;
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('favorites')
-          .get();
-      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
-    } catch (e) {
-      debugPrint('❌ Error loading favorites: $e');
-    }
-  }
+  // =============================
+  // FILTERING LOGIC
+  // =============================
 
-  /// Adds a product to the user's favorites.
-  Future<void> _addFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id']!;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .set({
-      ...product,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-    setState(() => likedProducts.add(productId));
-  }
-
-  /// Removes a product from the user's favorites.
-  Future<void> _removeFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id'];
-    if (productId == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .delete();
-    setState(() => likedProducts.remove(productId));
-  }
-
-  /// Returns items filtered by selected characters and types.
+  /// Returns a list of products filtered by selected characters and accessory types
   List<Map<String, String>> get _filteredItems {
     return _allItems.where((item) {
       final matchesCharacter = _selectedCharacters.isEmpty ||
-          _selectedCharacters.any((c) => item['name']?.toLowerCase().contains(c.toLowerCase()) ?? false);
+          _selectedCharacters.any((c) =>
+              item['name']?.toLowerCase().contains(c.toLowerCase()) ?? false);
 
       final matchesType = _selectedTypes.isEmpty ||
           _selectedTypes.any((t) {
@@ -185,7 +221,7 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
     }).toList();
   }
 
-  /// Resets all selected filters.
+  /// Clears all selected filters
   void _resetFilters() {
     setState(() {
       _selectedCharacters.clear();
@@ -193,7 +229,7 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
     });
   }
 
-  /// Builds the filter sidebar panel with character and accessory type options.
+  /// Builds the filter sidebar panel with character & accessory type filters
   Widget _buildFilterPanel() {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 80),
@@ -208,21 +244,30 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(gender,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    gender,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 ...roles.entries.map((roleEntry) {
                   return ExpansionTile(
-                    title: Text(roleEntry.key, style: const TextStyle(color: Colors.white)),
+                    title: Text(
+                      roleEntry.key,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     children: roleEntry.value
                         .map((char) => CheckboxListTile(
                               value: _selectedCharacters.contains(char),
                               onChanged: (v) {
                                 setState(() {
-                                  v! ? _selectedCharacters.add(char) : _selectedCharacters.remove(char);
+                                  v!
+                                      ? _selectedCharacters.add(char)
+                                      : _selectedCharacters.remove(char);
                                 });
                               },
-                              title: Text(char, style: const TextStyle(color: Colors.white)),
+                              title:
+                                  Text(char, style: const TextStyle(color: Colors.white)),
                               controlAffinity: ListTileControlAffinity.leading,
                             ))
                         .toList(),
@@ -234,7 +279,8 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
           }),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
-            child: Text("Type", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text("Type",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           ..._accessoryTypes.map((t) => CheckboxListTile(
                 value: _selectedTypes.contains(t),
@@ -264,14 +310,21 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
     );
   }
 
+  // =============================
+  // WIDGET BUILD
+  // =============================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
+
     final sidebarWidth = isSmallScreen ? screenWidth * 0.5 : 300.0;
     final gridWidth = screenWidth - (_showFilters ? sidebarWidth : 0);
+
     final crossAxisCount = (gridWidth / 160).floor().clamp(1, 4);
     final itemWidth = gridWidth / crossAxisCount - 8;
+
     final filteredItems = _filteredItems;
 
     return Scaffold(
@@ -304,7 +357,10 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
                     return GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => ProductPage(product: Map<String, String>.from(item))),
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ProductPage(product: Map<String, String>.from(item)),
+                        ),
                       ),
                       child: Container(
                         padding: const EdgeInsets.all(6),
@@ -326,7 +382,10 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
                               child: Text(
                                 item['name'] ?? '',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -343,7 +402,9 @@ class _ComputerAccessoryPageState extends State<ComputerAccessoryPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(item['price'] ?? '', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                Text(item['price'] ?? '',
+                                    style: const TextStyle(
+                                        color: Colors.redAccent, fontSize: 12)),
                                 GestureDetector(
                                   onTap: () async {
                                     if (isLiked) {

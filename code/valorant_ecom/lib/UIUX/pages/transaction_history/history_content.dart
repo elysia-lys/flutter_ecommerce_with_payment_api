@@ -1,9 +1,24 @@
+// ==============================
+// HISTORY_CONTENT.DART
+// Displays details of a specific paid order
+// ==============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Displays simplified order details for a given Firestore document ID in `paidProducts`.
+// ==============================
+// HISTORY CONTENT PAGE WIDGET
+// ==============================
+
+/// A page that displays detailed information for a single order
+/// fetched from Firestore `paidProducts` collection.
+/// 
+/// - [docId] is the Firestore document ID of the order.
+/// - Displays customer info, products, payment info, and delivery status.
+/// - Allows marking order as "Completed" if currently "delivering".
 class HistoryContentPage extends StatefulWidget {
-  final String docId; // Firestore document ID from paidProducts
+  /// Firestore document ID for the specific order
+  final String docId;
 
   const HistoryContentPage({
     super.key,
@@ -14,16 +29,33 @@ class HistoryContentPage extends StatefulWidget {
   State<HistoryContentPage> createState() => _HistoryContentPageState();
 }
 
+// ==============================
+// HISTORY CONTENT STATE
+// ==============================
+
 class _HistoryContentPageState extends State<HistoryContentPage> {
+  /// Stores fetched order data
   Map<String, dynamic>? orderData;
+
+  /// Indicates if Firestore fetch is in progress
   bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchOrder();
+    _fetchOrder(); // Load order details on page load
   }
 
+  // ==============================
+  // FETCH ORDER DATA FROM FIRESTORE
+  // ==============================
+
+  /// Retrieves the order document from Firestore.
+  /// 
+  /// Steps:
+  /// 1. Access `paidProducts` collection using `docId`.
+  /// 2. If document exists, store its data in [orderData].
+  /// 3. Handle errors and log missing documents.
   Future<void> _fetchOrder() async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -46,6 +78,13 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
     }
   }
 
+  // ==============================
+  // MARK ORDER AS COMPLETED
+  // ==============================
+
+  /// Updates the `deliveryStatus` of the order to "Completed".
+  /// 
+  /// Updates Firestore and refreshes UI state.
   Future<void> markOrderCompleted() async {
     if (orderData == null) return;
 
@@ -60,8 +99,13 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
     });
   }
 
+  // ==============================
+  // BUILD METHOD
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
+    // 🔹 Show loading spinner while fetching data
     if (isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -71,6 +115,7 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
       );
     }
 
+    // ⚠️ Handle case where order was not found
     if (orderData == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -83,7 +128,9 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
       );
     }
 
-    // Normalize product list
+    // ==============================
+    // NORMALIZE PRODUCT DATA
+    // ==============================
     final productField = orderData?['product'];
     final productList = <Map<String, dynamic>>[];
 
@@ -95,6 +142,9 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
       }
     }
 
+    // ==============================
+    // EXTRACT ORDER FIELDS WITH FALLBACKS
+    // ==============================
     final custName = orderData?['custName'] ?? '-';
     final address = orderData?['address'] ?? '-';
     final email = orderData?['custEmail'] ?? '-';
@@ -104,6 +154,9 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
     final paymentMethod = orderData?['paymentMethod'] ?? '-';
     final deliveryStatus = orderData?['deliveryStatus'] ?? '-';
 
+    // ==============================
+    // BUILD PAGE LAYOUT
+    // ==============================
     return Scaffold(
       appBar: AppBar(
         title: const Text("Order Details"),
@@ -116,7 +169,7 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Order IDs
+            // ----- ORDER IDENTIFIERS -----
             Text(
               "Order ID: $orderId",
               style: const TextStyle(
@@ -126,7 +179,7 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
                 style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 12),
 
-            // Customer info
+            // ----- CUSTOMER INFO -----
             const Text("Customer Info",
                 style: TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -137,14 +190,14 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
             Text("Address: $address", style: const TextStyle(color: Colors.white70)),
             const Divider(height: 32, color: Colors.white24),
 
-            // Payment & Delivery info
+            // ----- PAYMENT & DELIVERY INFO -----
             Text("Payment Method: $paymentMethod",
                 style: const TextStyle(color: Colors.white70, fontSize: 16)),
             Text("Delivery Status: $deliveryStatus",
                 style: const TextStyle(color: Colors.white70, fontSize: 16)),
             const Divider(height: 32, color: Colors.white24),
 
-            // Product list
+            // ----- PRODUCT LIST -----
             const Text("Products",
                 style: TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -162,7 +215,9 @@ class _HistoryContentPageState extends State<HistoryContentPage> {
               const Text("No items found.", style: TextStyle(color: Colors.white70)),
 
             const SizedBox(height: 20),
-            // ✅ Show button only if status is "delivering"
+
+            // ----- MARK ORDER AS COMPLETED BUTTON -----
+            // ✅ Only show button if order is currently delivering
             if (deliveryStatus == 'delivering')
               Center(
                 child: ElevatedButton.icon(

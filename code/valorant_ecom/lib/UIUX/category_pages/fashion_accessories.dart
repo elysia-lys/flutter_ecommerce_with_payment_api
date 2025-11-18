@@ -1,56 +1,72 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';
-import 'package:valo/UIUX/pages/product.dart';
-import '../layout/layout.dart';
-import '../../main.dart';
+// ==============================
+// FASHION_ACCESSORY.DART
+// Flutter E-Commerce Demo: Fashion Accessories Page
+// ==============================
 
-/// {@template fashion_accessory_page}
-/// A page displaying a collection of fashion accessory products from Firestore.
-/// Features include:
-/// - Character-based and type-based filtering
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore database
+import 'package:valo/UIUX/pages/mainpage.dart'; // Access global likedProducts
+import 'package:valo/UIUX/pages/product.dart'; // Product detail page
+import '../layout/layout.dart'; // Custom app layout wrapper
+import '../../main.dart'; // SafeImage widget
+
+// ==============================
+// FASHION ACCESSORY PAGE WIDGET
+// ==============================
+
+/// Stateful widget that displays fashion accessory products.
+///
+/// Features:
+/// - Firestore-based product loading filtered by category 'fashion_accessory'
 /// - Favorite management for logged-in users
-/// - Responsive grid layout for product display
-/// - Floating action button to toggle filter sidebar
-/// {@endtemplate}
+/// - Character-based and type-based filtering
+/// - Responsive grid layout with toggleable filter sidebar
+/// - Navigation to ProductPage on product tap
 class FashionAccessoryPage extends StatefulWidget {
   const FashionAccessoryPage({super.key});
 
-  /// Stores all fashion accessory items globally for reuse.
+  /// Global list storing all fashion accessory items
   static List<Map<String, String>> allItems = [];
 
   @override
   State<FashionAccessoryPage> createState() => _FashionAccessoryPageState();
 }
 
-/// State for [FashionAccessoryPage].
-/// Handles product data loading, filtering, favorites, and user login.
+// ==============================
+// FASHION ACCESSORY PAGE STATE
+// ==============================
+
+/// Maintains state for FashionAccessoryPage, including:
+/// - Loaded fashion accessory products
+/// - Selected filters (characters & types)
+/// - Logged-in user ID and favorites
+/// - Filter sidebar visibility
 class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
-  /// List of all fashion accessory items.
+  // -----------------------------
+  // STATE VARIABLES
+  // -----------------------------
+
+  /// List of all fashion accessory products loaded from Firestore
   List<Map<String, String>> _allItems = [];
 
-  /// Currently logged-in user's ID.
+  /// Currently logged-in user's ID
   String? userId;
 
-  /// Selected characters for filtering.
+  /// Selected character filters
   Set<String> _selectedCharacters = {};
 
-  /// Selected accessory types for filtering.
+  /// Selected accessory type filters
   Set<String> _selectedTypes = {};
 
-  /// Controls visibility of the filter sidebar.
+  /// Controls visibility of the filter sidebar
   bool _showFilters = false;
 
-  /// Available fashion accessory types for filtering.
+  /// Available fashion accessory types for filtering
   final List<String> _accessoryTypes = [
-    'Earrings',
-    'Ring',
-    'Tattoos',
-    'Cosplay',
-    'Wig',
+    'Earrings', 'Ring', 'Tattoos', 'Cosplay', 'Wig',
   ];
 
-  /// Character groups by gender and role for filtering.
+  /// Character groups organized by gender → role → character
   final Map<String, Map<String, List<String>>> _characterGroups = {
     'Female': {
       'Sentinels': ['Sage', 'Killjoy', 'Deadlock', 'Vyse'],
@@ -66,13 +82,25 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
     },
   };
 
+  // -----------------------------
+  // INITIALIZATION
+  // -----------------------------
+
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Check user login and load data
   }
 
-  /// Checks if a user is logged in, sets [userId], and loads products and favorites.
+  // ==============================
+  // USER LOGIN & FAVORITE MANAGEMENT
+  // ==============================
+
+  /// Checks Firestore to determine if a user is logged in.
+  /// 
+  /// If logged in:
+  /// - Stores `userId`
+  /// - Loads products and favorites
   Future<void> _checkLoginStatus() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
@@ -91,10 +119,63 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
     }
   }
 
-  /// Loads fashion accessory products from Firestore and filters by category.
+  /// Loads favorite product IDs for the logged-in user
+  Future<void> _loadFavorites() async {
+    if (userId == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('favorites')
+          .get();
+      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
+    } catch (e) {
+      debugPrint('❌ Error loading favorites: $e');
+    }
+  }
+
+  /// Adds a product to Firestore favorites collection
+  Future<void> _addFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id']!;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .set({
+      ...product,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    setState(() => likedProducts.add(productId));
+  }
+
+  /// Removes a product from Firestore favorites collection
+  Future<void> _removeFavorite(Map<String, String> product) async {
+    if (userId == null) return;
+    final productId = product['id'];
+    if (productId == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .doc(productId)
+        .delete();
+
+    setState(() => likedProducts.remove(productId));
+  }
+
+  // ==============================
+  // FIRESTORE PRODUCT LOADING
+  // ==============================
+
+  /// Loads fashion accessory products from Firestore filtered by category 'fashion_accessory'
   Future<void> _loadProducts() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('products').get();
+
       final items = snapshot.docs.map((doc) {
         final data = doc.data();
         return {
@@ -113,73 +194,38 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
 
       setState(() {
         _allItems = items;
-        FashionAccessoryPage.allItems = _allItems;
+        FashionAccessoryPage.allItems = _allItems; // Update global reference
       });
 
-      debugPrint('✅ Loaded ${items.length} fashion accessories');
+      debugPrint('✅ Loaded ${items.length} fashion accessory items');
     } catch (e) {
-      debugPrint('❌ Error loading accessories: $e');
+      debugPrint('❌ Error loading fashion accessories: $e');
     }
   }
 
-  /// Loads the user's favorite products from Firestore.
-  Future<void> _loadFavorites() async {
-    if (userId == null) return;
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('favorites')
-          .get();
-      setState(() => likedProducts = snapshot.docs.map((doc) => doc.id).toSet());
-    } catch (e) {
-      debugPrint('❌ Error loading favorites: $e');
-    }
-  }
+  // ==============================
+  // FILTERING LOGIC
+  // ==============================
 
-  /// Adds a product to the user's favorites in Firestore.
-  Future<void> _addFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id']!;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .set({...product, 'timestamp': FieldValue.serverTimestamp()});
-    setState(() => likedProducts.add(productId));
-  }
-
-  /// Removes a product from the user's favorites in Firestore.
-  Future<void> _removeFavorite(Map<String, String> product) async {
-    if (userId == null) return;
-    final productId = product['id'];
-    if (productId == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('favorites')
-        .doc(productId)
-        .delete();
-    setState(() => likedProducts.remove(productId));
-  }
-
-  /// Returns the filtered list of items based on selected characters and types.
+  /// Returns a list of products filtered by selected characters and accessory types
   List<Map<String, String>> get _filteredItems {
     return _allItems.where((item) {
       final matchesCharacter = _selectedCharacters.isEmpty ||
-          _selectedCharacters.any((c) => item['name']?.toLowerCase().contains(c.toLowerCase()) ?? false);
+          _selectedCharacters.any((c) =>
+              item['name']?.toLowerCase().contains(c.toLowerCase()) ?? false);
+
       final matchesType = _selectedTypes.isEmpty ||
           _selectedTypes.any((t) {
             final name = item['name']?.toLowerCase() ?? '';
             final desc = item['desc']?.toLowerCase() ?? '';
             return name.contains(t.toLowerCase()) || desc.contains(t.toLowerCase());
           });
+
       return matchesCharacter && matchesType;
     }).toList();
   }
 
-  /// Resets all selected filters.
+  /// Clears all selected filters
   void _resetFilters() {
     setState(() {
       _selectedCharacters.clear();
@@ -187,13 +233,14 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
     });
   }
 
-  /// Builds the filter sidebar UI with character groups and accessory types.
+  /// Builds the filter sidebar panel with character & accessory type filters
   Widget _buildFilterPanel() {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Character filters by gender and role
           ..._characterGroups.entries.map((genderEntry) {
             final gender = genderEntry.key;
             final roles = genderEntry.value;
@@ -202,21 +249,30 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(gender,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    gender,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 ...roles.entries.map((roleEntry) {
                   return ExpansionTile(
-                    title: Text(roleEntry.key, style: const TextStyle(color: Colors.white)),
+                    title: Text(
+                      roleEntry.key,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     children: roleEntry.value
                         .map((char) => CheckboxListTile(
                               value: _selectedCharacters.contains(char),
                               onChanged: (v) {
                                 setState(() {
-                                  v! ? _selectedCharacters.add(char) : _selectedCharacters.remove(char);
+                                  v!
+                                      ? _selectedCharacters.add(char)
+                                      : _selectedCharacters.remove(char);
                                 });
                               },
-                              title: Text(char, style: const TextStyle(color: Colors.white)),
+                              title:
+                                  Text(char, style: const TextStyle(color: Colors.white)),
                               controlAffinity: ListTileControlAffinity.leading,
                             ))
                         .toList(),
@@ -226,6 +282,7 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
               ],
             );
           }),
+          // Accessory type filters
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text("Type",
@@ -242,6 +299,7 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
                 controlAffinity: ListTileControlAffinity.leading,
               )),
           const SizedBox(height: 10),
+          // Reset filters button
           Center(
             child: ElevatedButton.icon(
               onPressed: _resetFilters,
@@ -249,7 +307,8 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
               label: const Text("Reset Filters"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
             ),
           ),
@@ -259,14 +318,21 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
     );
   }
 
+  // ==============================
+  // WIDGET BUILD
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
+
     final sidebarWidth = isSmallScreen ? screenWidth * 0.5 : 300.0;
     final gridWidth = screenWidth - (_showFilters ? sidebarWidth : 0);
+
     final crossAxisCount = (gridWidth / 160).floor().clamp(1, 4);
     final itemWidth = gridWidth / crossAxisCount - 8;
+
     final filteredItems = _filteredItems;
 
     return Scaffold(
@@ -275,6 +341,7 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
         appBarActions: const [],
         body: Row(
           children: [
+            // Filter sidebar
             if (_showFilters)
               Container(
                 width: sidebarWidth,
@@ -282,6 +349,7 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
                 color: Colors.black12,
                 child: _buildFilterPanel(),
               ),
+            // Product grid
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(6.0),
@@ -300,7 +368,8 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ProductPage(product: Map<String, String>.from(item)),
+                          builder: (_) =>
+                              ProductPage(product: Map<String, String>.from(item)),
                         ),
                       ),
                       child: Container(
@@ -324,7 +393,9 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
                                 item['name'] ?? '',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -342,7 +413,8 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(item['price'] ?? '',
-                                    style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                    style: const TextStyle(
+                                        color: Colors.redAccent, fontSize: 12)),
                                 GestureDetector(
                                   onTap: () async {
                                     if (isLiked) {
@@ -374,11 +446,7 @@ class _FashionAccessoryPageState extends State<FashionAccessoryPage> {
         backgroundColor: Colors.redAccent,
         icon: Icon(_showFilters ? Icons.close : Icons.filter_alt),
         label: Text(_showFilters ? "Hide Filters" : "Show Filters"),
-        onPressed: () {
-          setState(() {
-            _showFilters = !_showFilters;
-          });
-        },
+        onPressed: () => setState(() => _showFilters = !_showFilters),
       ),
     );
   }

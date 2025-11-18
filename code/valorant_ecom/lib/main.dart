@@ -1,50 +1,73 @@
+// ==============================
+// MAIN.DART
+// Flutter E-Commerce Demo Application Entry
+// ==============================
+
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:valo/UIUX/pages/mainpage.dart';
-import 'UIUX/login_credential/login.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore database
+import 'package:shared_preferences/shared_preferences.dart'; // Local storage for session
+import 'package:firebase_core/firebase_core.dart'; // Firebase initialization
+import 'package:valo/UIUX/pages/mainpage.dart'; // Main dashboard page
+import 'UIUX/login_credential/login.dart'; // Login page if user not authenticated
+
+// ==============================
+// ENTRY POINT
+// ==============================
 
 /// Entry point of the Flutter application.
-/// 
-/// This function ensures Flutter bindings are initialized before Firebase.
-/// It initializes Firebase, then launches the main app widget [MyApp].
+///
+/// Ensures Flutter bindings are initialized before any async operations.
+/// Initializes Firebase and launches the root widget [MyApp].
 Future<void> main() async {
+  // Ensure Flutter engine is initialized before Firebase
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase services
   await Firebase.initializeApp();
+
+  // Launch the app
   runApp(const MyApp());
 }
 
+// ==============================
+// ROOT WIDGET
+// ==============================
+
 /// Root widget of the application.
-/// 
-/// Configures the global theme, disables the debug banner, 
-/// and sets [AuthCheck] as the home screen to determine 
-/// whether a user is already logged in.
+///
+/// - Configures global theme.
+/// - Disables debug banner.
+/// - Uses [AuthCheck] to determine initial navigation.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
+      debugShowCheckedModeBanner: false, // Remove debug banner
       title: 'E-Commerce Demo',
       theme: ThemeData(
-        primarySwatch: Colors.red,
-        brightness: Brightness.dark,
+        primarySwatch: Colors.red, // Main color
+        brightness: Brightness.dark, // Dark theme globally
       ),
-      home: const AuthCheck(),
+      home: const AuthCheck(), // Initial widget to check login status
     );
   }
 }
 
-/// A stateful widget that determines the user's authentication status.
+// ==============================
+// AUTHENTICATION CHECK WIDGET
+// ==============================
+
+/// Stateful widget that determines whether the user is logged in.
 ///
-/// The widget checks both:
-/// 1. Local storage (via [SharedPreferences]) for a previously logged-in user.
-/// 2. Firestore collection for a user document with `'loggedIn': true`.
+/// Checks:
+/// 1. Local session in [SharedPreferences].
+/// 2. Firestore 'users' collection for any document with `'loggedIn': true`.
 ///
-/// Based on these checks, it redirects to either [MainPage] (if logged in)
-/// or [LoginPage] (if not).
+/// Redirects:
+/// - Logged-in users -> [MainPage]
+/// - Not logged-in -> [LoginPage]
 class AuthCheck extends StatefulWidget {
   const AuthCheck({super.key});
 
@@ -53,51 +76,56 @@ class AuthCheck extends StatefulWidget {
 }
 
 class _AuthCheckState extends State<AuthCheck> {
-  /// Indicates whether the login check is still in progress.
+  /// Indicates whether the login check is ongoing.
   bool _checking = true;
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkLoginStatus(); // Start authentication check
   }
 
-  /// Checks the login status of the current user.
+  // ==============================
+  // LOGIN STATUS CHECK
+  // ==============================
+
+  /// Checks if a user is already logged in.
   ///
-  /// This method:
-  /// - First waits briefly to maintain a black screen (smooth transition).
-  /// - Reads local data from [SharedPreferences] for a saved user ID.
-  /// - If not found, queries Firestore for any user with `'loggedIn' == true'`.
-  /// - Navigates to the appropriate page based on the results.
+  /// Steps:
+  /// 1. Delay briefly to maintain splash screen visibility.
+  /// 2. Check local storage for saved user ID.
+  /// 3. If not found, query Firestore for logged-in user.
+  /// 4. Navigate to the appropriate page.
   Future<void> _checkLoginStatus() async {
     try {
-      // 🕑 Short delay ensures the splash screen remains briefly visible.
+      // Small delay for smooth splash transition
       await Future.delayed(const Duration(milliseconds: 300));
 
+      // Access local storage
       final prefs = await SharedPreferences.getInstance();
       final savedUserId = prefs.getString('loggedInUser');
 
       if (savedUserId != null) {
-        // ✅ User found locally — navigate to main dashboard.
+        // ✅ User exists locally — navigate to main page
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const MainPage()),
           );
         }
-        return;
+        return; // Stop further checks
       }
 
-      // 🔹 No local session — check Firestore for a logged-in record.
+      // 🔹 No local session — check Firestore for logged-in user
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('loggedIn', isEqualTo: true)
-          .limit(1)
+          .limit(1) // Only need one document
           .get();
 
       final loggedIn = snapshot.docs.isNotEmpty;
 
-      // ✅ Navigate to appropriate screen depending on Firestore result.
+      // Navigate to MainPage or LoginPage based on Firestore result
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -107,7 +135,7 @@ class _AuthCheckState extends State<AuthCheck> {
         );
       }
     } catch (e) {
-      // ⚠️ Any error encountered will fallback to the login page.
+      // ⚠️ Error handling — fallback to login page
       debugPrint('⚠️ Error checking login status: $e');
       if (mounted) {
         Navigator.pushReplacement(
@@ -116,24 +144,28 @@ class _AuthCheckState extends State<AuthCheck> {
         );
       }
     } finally {
-      // 🖤 Mark completion of status checking to remove black overlay.
+      // Remove black overlay/loading spinner
       if (mounted) {
         setState(() => _checking = false);
       }
     }
   }
 
+  // ==============================
+  // WIDGET BUILD
+  // ==============================
+
   @override
   Widget build(BuildContext context) {
-    // 🖤 Display a pure black screen while checking to avoid flicker.
+    // Display black screen while login status is being checked
     if (_checking) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: SizedBox.expand(),
+        body: SizedBox.expand(), // Fills screen
       );
     }
 
-    // 🔁 Fallback — should not be displayed unless state is inconsistent.
+    // Fallback — display a loading spinner (should rarely appear)
     return const Scaffold(
       backgroundColor: Colors.black,
       body: Center(child: CircularProgressIndicator(color: Colors.redAccent)),
@@ -141,34 +173,34 @@ class _AuthCheckState extends State<AuthCheck> {
   }
 }
 
-/// A utility widget for safely loading images from either
-/// local assets or network URLs.
+// ==============================
+// SAFE IMAGE WIDGET
+// ==============================
+
+/// Loads images safely from either assets or network.
 ///
-/// Provides graceful error handling by falling back to a placeholder image
-/// when the target asset or network image fails to load.
+/// - Falls back to a placeholder if image fails to load.
+/// - Supports optional width, height, and [BoxFit] properties.
 ///
-/// Example usage:
+/// Example:
 /// ```dart
 /// SafeImage('assets/images/product.png', fit: BoxFit.cover);
 /// SafeImage('https://example.com/image.jpg', width: 100);
 /// ```
 class SafeImage extends StatelessWidget {
-  /// The path or URL of the image.
+  /// Image source (asset path or network URL)
   final String path;
 
-  /// How the image should be inscribed into the space allocated.
+  /// Image fit inside available space
   final BoxFit fit;
 
-  /// Optional width of the image.
+  /// Optional width
   final double? width;
 
-  /// Optional height of the image.
+  /// Optional height
   final double? height;
 
-  /// Creates a [SafeImage] widget.
-  ///
-  /// The [path] can be either a local asset path or a network URL.
-  /// If loading fails, a default placeholder will be displayed.
+  /// Constructor
   const SafeImage(
     this.path, {
     super.key,
@@ -179,10 +211,10 @@ class SafeImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Default placeholder image for missing or invalid resources.
+    // Placeholder image if loading fails
     const placeholder = "assets/others/image_not_found.png";
 
-    // If path is a network URL, use Image.network with fallback.
+    // Network image loading
     if (path.startsWith("http")) {
       return Image.network(
         path,
@@ -194,7 +226,7 @@ class SafeImage extends StatelessWidget {
       );
     }
 
-    // Otherwise, attempt to load a local asset image.
+    // Local asset image loading
     return Image.asset(
       path.isNotEmpty ? path : placeholder,
       fit: fit,
