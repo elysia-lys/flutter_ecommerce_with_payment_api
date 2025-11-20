@@ -10,6 +10,7 @@ import 'package:valo/payment_API/order_checkout.dart';
 import '../../main.dart'; // SafeImage widget for image rendering
 import '../layout/layout.dart'; // Shared AppLayout for consistent app design
 import '../login_credential/login.dart'; // LoginPage redirect if user is not logged in
+import 'cart_product.dart'; // CartProductPage for viewing individual product
 
 /// Global cart count notifier
 /// This ValueNotifier allows the cart badge to be updated across the app
@@ -245,105 +246,130 @@ class _CartPageState extends State<CartPage> {
                     ];
                     final details = detailsList.join(' / ');
 
-                    return GestureDetector(
-                      onTap: () async {
-                        // Open EditCartItemPage to edit quantity or options
-                        final updated = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => EditCartItemPage(
-                              userId: userId!,
-                              cartDocId: item['id'],
-                              item: item,
+                    return Card(
+                      color: Colors.grey[900],
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Checkbox for selecting item
+                            Checkbox(
+                              value: item['selected'] ?? true,
+                              onChanged: (v) =>
+                                  toggleItemSelection(item['id'], v ?? false),
+                              activeColor: Colors.redAccent,
                             ),
-                          ),
-                        );
 
-                        if (updated == true && mounted) {
-                          setState(() {}); // Refresh UI
-                          _updateCartCount(); // Update badge
-                        }
-                      },
-
-                      child: Card(
-                        color: Colors.grey[900],
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Checkbox for selecting item
-                              Checkbox(
-                                value: item['selected'] ?? true,
-                                onChanged: (v) => toggleItemSelection(
-                                    item['id'], v ?? false),
-                                activeColor: Colors.redAccent,
-                              ),
-                              // Product image
-                              SafeImage(item['image'] ?? '',
-                                  width: 50, height: 50, fit: BoxFit.cover),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
+                            // Entire product row tappable → CartProductPage
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CartProductPage(
+                                        product: item,
+                                        userId: userId!,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Product name
-                                    Text(item['name'] ?? '',
-                                        style: const TextStyle(
-                                            color: Colors.white)),
-                                    // Product details (color/size/measurement)
-                                    if (details.isNotEmpty)
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(top: 2.0),
-                                        child: Text(
-                                          details,
-                                          style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 14),
-                                        ),
+                                    // Product image
+                                    SafeImage(item['image'] ?? '',
+                                        width: 50, height: 50, fit: BoxFit.cover),
+                                    const SizedBox(width: 10),
+
+                                    // Product details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(item['name'] ?? '',
+                                              style: const TextStyle(
+                                                  color: Colors.white)),
+                                          if (details.isNotEmpty)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 2.0),
+                                              child: Text(
+                                                details,
+                                                style: const TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 14),
+                                              ),
+                                            ),
+                                          const SizedBox(height: 5),
+                                          Text(
+                                              "\$${item['price']} x ${item['quantity']}",
+                                              style: const TextStyle(
+                                                  color: Colors.white70)),
+                                          Row(
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons.remove,
+                                                    color: Colors.redAccent),
+                                                onPressed: () => updateQuantity(
+                                                    item['id'],
+                                                    item['quantity'] - 1),
+                                              ),
+                                              Text("${item['quantity']}",
+                                                  style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 16)),
+                                              IconButton(
+                                                icon: const Icon(Icons.add,
+                                                    color: Colors.greenAccent),
+                                                onPressed: () => updateQuantity(
+                                                    item['id'],
+                                                    item['quantity'] + 1),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
-                                    const SizedBox(height: 5),
-                                    // Price x Quantity
-                                    Text("\$${item['price']} x ${item['quantity']}",
-                                        style: const TextStyle(
-                                            color: Colors.white70)),
-                                    // Quantity increment/decrement buttons
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.remove,
-                                              color: Colors.redAccent),
-                                          onPressed: () => updateQuantity(
-                                              item['id'],
-                                              item['quantity'] - 1),
-                                        ),
-                                        Text("${item['quantity']}",
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16)),
-                                        IconButton(
-                                          icon: const Icon(Icons.add,
-                                              color: Colors.greenAccent),
-                                          onPressed: () => updateQuantity(
-                                              item['id'],
-                                              item['quantity'] + 1),
-                                        ),
-                                      ],
                                     ),
                                   ],
                                 ),
                               ),
-                              // Delete button
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.redAccent),
-                                onPressed: () => deleteItem(item['id']),
-                              ),
-                            ],
-                          ),
+                            ),
+
+                            // Edit icon → EditCartItemPage
+                            IconButton(
+                              icon: const Icon(Icons.edit,
+                                  color: Colors.yellowAccent),
+                              tooltip: "Edit Item",
+                              onPressed: () async {
+                                final updated = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EditCartItemPage(
+                                      userId: userId!,
+                                      cartDocId: item['id'],
+                                      item: item,
+                                    ),
+                                  ),
+                                );
+                                if (updated == true && mounted) {
+                                  setState(() {});
+                                  _updateCartCount();
+                                }
+                              },
+                            ),
+
+                            // Delete button
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.redAccent),
+                              onPressed: () => deleteItem(item['id']),
+                            ),
+                          ],
                         ),
                       ),
                     );
