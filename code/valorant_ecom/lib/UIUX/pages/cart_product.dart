@@ -9,9 +9,14 @@ import 'package:valo/UIUX/pages/cart.dart';
 import 'package:valo/main.dart'; // SafeImage widget and cartCountNotifier
 import 'package:valo/payment_API/order_checkout.dart';
 
+/// `CartProductPage`
+///
+/// This page displays a single cart item in detail, allows selecting product options
+/// (color, size, measurement), adjusting quantity, adding to cart (with merge logic
+/// if the same options already exist), or proceeding to checkout directly.
 class CartProductPage extends StatefulWidget {
-  final Map<String, dynamic> product; // Cart item tapped
-  final String userId;
+  final Map<String, dynamic> product; // The cart item that was tapped
+  final String userId; // Current user's Firestore document ID
 
   const CartProductPage({super.key, required this.product, required this.userId});
 
@@ -20,25 +25,27 @@ class CartProductPage extends StatefulWidget {
 }
 
 class _CartProductPageState extends State<CartProductPage> {
-  int quantity = 1;
-  String? selectedColor;
-  String? selectedSize;
-  String? selectedMeasurement;
+  int quantity = 1; // Quantity selected by the user
+  String? selectedColor; // Selected color option
+  String? selectedSize; // Selected size option
+  String? selectedMeasurement; // Selected measurement option
 
-  List<String> colors = [];
-  List<String> sizes = [];
-  List<String> measurements = [];
+  List<String> colors = []; // Available color options
+  List<String> sizes = []; // Available size options
+  List<String> measurements = []; // Available measurement options
 
-  bool isLoading = true;
-  bool isAddingToCart = false;
+  bool isLoading = true; // Tracks whether product options are being loaded
+  bool isAddingToCart = false; // Tracks if "Add to Cart" is in progress
 
   @override
   void initState() {
     super.initState();
-    _loadProductOptions();
+    _loadProductOptions(); // Load product options from Firestore when page opens
   }
 
-  /// Load options from Firestore like EditCartItemPage
+  /// Load product options from Firestore
+  /// For a product with the same name, fetch its color, size, and measurement options
+  /// and store them in corresponding lists.
   Future<void> _loadProductOptions() async {
     try {
       final query = await FirebaseFirestore.instance
@@ -55,7 +62,7 @@ class _CartProductPageState extends State<CartProductPage> {
       final data = query.docs.first.data();
 
       setState(() {
-        colors = _parseOptions(data['color']);
+        colors = _parseOptions(data['color']); // Convert comma-separated string to list
         sizes = _parseOptions(data['size']);
         measurements = _parseOptions(data['measurement']);
         isLoading = false;
@@ -66,12 +73,14 @@ class _CartProductPageState extends State<CartProductPage> {
     }
   }
 
+  /// Convert a raw comma-separated string of options into a trimmed List<String>
   List<String> _parseOptions(dynamic raw) {
     if (raw == null || raw.toString().trim().isEmpty) return [];
     return raw.toString().split(',').map((e) => e.trim()).toList();
   }
 
-  /// Generate cart document ID
+  /// Generate a unique cart document ID based on product name + selected options
+  /// This ensures that adding the same product with same options merges quantity
   String _generateCartDocId() {
     final name = widget.product['name'] ?? '';
     final color = selectedColor ?? '';
@@ -80,7 +89,7 @@ class _CartProductPageState extends State<CartProductPage> {
     return '${name}_${color}${size}${measurement}';
   }
 
-  /// Show max quantity dialog
+  /// Show a dialog if quantity exceeds the maximum allowed (100)
   Future<void> _showMaxQtyDialog() async {
     await showDialog(
       context: context,
@@ -97,7 +106,13 @@ class _CartProductPageState extends State<CartProductPage> {
     );
   }
 
-  /// Add to cart button logic
+  /// Add product to cart with merge logic
+  ///
+  /// - Validates required options (color, size, measurement)
+  /// - Checks if a cart document with same options exists
+  /// - If exists, increments the quantity
+  /// - Otherwise, creates a new cart document
+  /// - Updates the global cart badge via `cartCountNotifier`
   Future<void> addToCart() async {
     if (isAddingToCart) return;
 
@@ -106,6 +121,7 @@ class _CartProductPageState extends State<CartProductPage> {
       return;
     }
 
+    // Ensure all required options are selected
     if ((colors.isNotEmpty && selectedColor == null) ||
         (sizes.isNotEmpty && selectedSize == null) ||
         (measurements.isNotEmpty && selectedMeasurement == null)) {
@@ -135,13 +151,13 @@ class _CartProductPageState extends State<CartProductPage> {
     } catch (_) {}
 
     if (doc.exists) {
-      // Merge quantity
+      // Merge quantity if same options already exist
       await cartRef.doc(docId).update({
         'quantity': (doc.data()?['quantity'] ?? 0) + quantity,
         'timestamp': FieldValue.serverTimestamp(),
       });
     } else {
-      // Add new
+      // Add new cart document
       await cartRef.doc(docId).set({
         'name': widget.product['name'] ?? '',
         'price': price,
@@ -155,7 +171,7 @@ class _CartProductPageState extends State<CartProductPage> {
       });
     }
 
-    // Update global cart badge
+    // Update cart badge count
     final snapshot = await cartRef.get();
     cartCountNotifier.value = snapshot.docs.length;
 
@@ -167,7 +183,10 @@ class _CartProductPageState extends State<CartProductPage> {
     }
   }
 
-  /// Checkout button logic
+  /// Checkout immediately with current selection
+  ///
+  /// Validates options and quantity, creates a temporary cart item,
+  /// then navigates to `OrderCheckout` page with this single item.
   void _checkoutNow() async {
     if (quantity > 100) {
       await _showMaxQtyDialog();
@@ -220,7 +239,10 @@ class _CartProductPageState extends State<CartProductPage> {
     }
   }
 
-  Widget _buildDropdown(String label, List<String> options, String? value, Function(String?) onChanged) {
+  /// Builds a dropdown menu for selecting product options
+  /// Only displayed if the options list is non-empty
+  Widget _buildDropdown(
+      String label, List<String> options, String? value, Function(String?) onChanged) {
     if (options.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,6 +286,7 @@ class _CartProductPageState extends State<CartProductPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Product image display
                   Center(
                     child: SafeImage(
                       product['image'] ?? 'assets/others/image_not_found.png',
@@ -273,20 +296,27 @@ class _CartProductPageState extends State<CartProductPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  // Product name
                   Text(
                     product['name'] ?? '',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const SizedBox(height: 8),
+                  // Product price
                   Text(
                     "\$${double.tryParse(product['price'].toString())?.toStringAsFixed(2) ?? '0.00'}",
                     style: const TextStyle(fontSize: 18, color: Colors.redAccent),
                   ),
                   const SizedBox(height: 16),
-                  if (colors.isNotEmpty) _buildDropdown("Color", colors, selectedColor, (v) => setState(() => selectedColor = v)),
-                  if (sizes.isNotEmpty) _buildDropdown("Size", sizes, selectedSize, (v) => setState(() => selectedSize = v)),
+                  // Option selectors
+                  if (colors.isNotEmpty)
+                    _buildDropdown("Color", colors, selectedColor, (v) => setState(() => selectedColor = v)),
+                  if (sizes.isNotEmpty)
+                    _buildDropdown("Size", sizes, selectedSize, (v) => setState(() => selectedSize = v)),
                   if (measurements.isNotEmpty)
                     _buildDropdown("Measurement", measurements, selectedMeasurement, (v) => setState(() => selectedMeasurement = v)),
+                  // Quantity selector
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -313,12 +343,14 @@ class _CartProductPageState extends State<CartProductPage> {
                       const SizedBox(height: 20),
                     ],
                   ),
+                  // Action buttons: Add to Cart / Checkout Now
                   Column(
                     children: [
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.all(16)),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent, padding: const EdgeInsets.all(16)),
                           onPressed: isAddingToCart ? null : addToCart,
                           child: isAddingToCart
                               ? const SizedBox(
@@ -333,7 +365,8 @@ class _CartProductPageState extends State<CartProductPage> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, padding: const EdgeInsets.all(16)),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.greenAccent, padding: const EdgeInsets.all(16)),
                           onPressed: _checkoutNow,
                           child: const Text('Checkout Now', style: TextStyle(fontSize: 16, color: Colors.black)),
                         ),
