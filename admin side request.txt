@@ -1,0 +1,14 @@
+i added admin sided features, if you want to continue can continue:
+
+# order management 
+- view all order (get from order collection)
+- payment confimation (just read the tx status update)
+-- delivery (read from paidOrders collection) 
+	* read the delivery status, to let user edit, i wrote the key word in the readme part on delivery status
+
+# user management
+- monitor registered user (read from user collection)
+- block or restrict suspicious account
+
+# main page 
+- just add a button which says generate report then yea i think uk what to do from there
