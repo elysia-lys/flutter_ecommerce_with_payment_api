@@ -43,7 +43,7 @@ dependencies:
   flutter_inappwebview: ^6.1.5  # Provides advanced WebView functionality with more control over web content
   webview_flutter: ^4.13.0 # Official Flutter plugin to embed simple WebViews in the app
   firebase_auth: ^6.1.1 # Firebase Authentication SDK – supports email/password, social login, and more
-  shared_preferences: ^2.5.3  # Persistent key-value storage for saving simple data locally on the device
+  shared_preferences: ^2.5.3  # Persistent key-value storage for saving simple data locally on the devicefl_chart: ^1.1.1  # A powerful charting library for creating various types of charts (line, bar, pie, etc.) in Flutter
 
   
 
